@@ -47,10 +47,10 @@ def main_workflow(piano_file, orchestra_file, seq_len=50, feature_dim=6):
 
     # Step 6: Build and train the model
     model = build_transformer_model(seq_len, feature_dim, num_classes)
-    model.fit([X_train, X_train], y_train_onehot, epochs=20, batch_size=16, verbose=1)
+    model.fit([X_train, X_train], y_train_onehot, epochs=20, batch_size=16, verbose=0)
 
     # Step 7: Predict on the test set
-    predictions = model.predict([X_test, X_test], verbose=1)
+    predictions = model.predict([X_test, X_test], verbose=0)
     y_pred = np.argmax(predictions, axis=-1).flatten()
     y_true = y_test.flatten()
 
