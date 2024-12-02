@@ -5,7 +5,7 @@ from model import build_transformer_model
 from midi_processing import midi_to_nmat
 from data_processing import pad_features, split_into_chunks
 from evaluation import evaluate_predictions
-from midi_processing import save_predictions_to_midi
+from save_midi import save_predictions_to_midi
 
 def main_workflow(piano_file, orchestra_file, seq_len=50, feature_dim=6):
     # Convert MIDI to Note Matrices
