@@ -30,43 +30,44 @@ def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
         "Range Appropriateness": evaluate_range_appropriateness()
     }
 
-def evaluate_midi(predicted_midi_path, ground_truth_midi_path, tolerance=0.1):
+# Evaluate Precision, Recall, and F1-Score for MIDI Orchestration
+def evaluate_metrics(ground_truth_midi_path, predicted_midi_path, tolerance=0.1):
     """
-    Evaluate the precision, recall, and F1-score between a predicted MIDI file and ground truth.
+    Calculate Precision, Recall, and F1-Score for the predicted orchestration MIDI file.
 
     Args:
-        predicted_midi_path (str): Path to the predicted orchestration MIDI file.
         ground_truth_midi_path (str): Path to the ground truth orchestration MIDI file.
+        predicted_midi_path (str): Path to the predicted orchestration MIDI file.
         tolerance (float): Timing tolerance for matching notes (in seconds).
 
     Returns:
-        dict: Precision, recall, and F1-score.
+        dict: Precision, Recall, and F1-Score metrics.
     """
     import pretty_midi
 
     # Load MIDI files
-    predicted_midi = pretty_midi.PrettyMIDI(predicted_midi_path)
     ground_truth_midi = pretty_midi.PrettyMIDI(ground_truth_midi_path)
+    predicted_midi = pretty_midi.PrettyMIDI(predicted_midi_path)
 
-    # Extract notes as (pitch, start_time) pairs
-    def extract_note_tokens(midi):
-        tokens = []
+    # Extract notes as (pitch, start_time) tuples
+    def extract_notes(midi):
+        notes = []
         for instrument in midi.instruments:
             for note in instrument.notes:
-                tokens.append((note.pitch, round(note.start, 4)))  # Round start time for tolerance
-        return set(tokens)
+                notes.append((note.pitch, round(note.start, 4)))  # Round to account for timing tolerance
+        return set(notes)
 
-    predicted_tokens = extract_note_tokens(predicted_midi)
-    ground_truth_tokens = extract_note_tokens(ground_truth_midi)
+    ground_truth_notes = extract_notes(ground_truth_midi)
+    predicted_notes = extract_notes(predicted_midi)
 
-    # Calculate TP, FP, FN
-    tp = len(predicted_tokens & ground_truth_tokens)
-    fp = len(predicted_tokens - ground_truth_tokens)
-    fn = len(ground_truth_tokens - predicted_tokens)
+    # True Positives, False Positives, False Negatives
+    true_positives = len(ground_truth_notes & predicted_notes)
+    false_positives = len(predicted_notes - ground_truth_notes)
+    false_negatives = len(ground_truth_notes - predicted_notes)
 
-    # Calculate metrics
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    # Precision, Recall, F1-Score
+    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
+    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
     f1_score = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return {
