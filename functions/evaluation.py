@@ -30,7 +30,6 @@ def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
         "Range Appropriateness": evaluate_range_appropriateness()
     }
 
-# Evaluate Precision, Recall, and F1-Score for MIDI Orchestration
 def evaluate_metrics(ground_truth_midi_path, predicted_midi_path, tolerance=0.1):
     """
     Calculate Precision, Recall, and F1-Score for the predicted orchestration MIDI file.
@@ -49,21 +48,40 @@ def evaluate_metrics(ground_truth_midi_path, predicted_midi_path, tolerance=0.1)
     ground_truth_midi = pretty_midi.PrettyMIDI(ground_truth_midi_path)
     predicted_midi = pretty_midi.PrettyMIDI(predicted_midi_path)
 
-    # Extract notes as (pitch, start_time) tuples
+    # Extract notes as (pitch, start_time, instrument) tuples
     def extract_notes(midi):
         notes = []
         for instrument in midi.instruments:
             for note in instrument.notes:
-                notes.append((note.pitch, round(note.start, 4)))  # Round to account for timing tolerance
-        return set(notes)
+                notes.append((note.pitch, note.start, instrument.program))
+        return notes
 
     ground_truth_notes = extract_notes(ground_truth_midi)
     predicted_notes = extract_notes(predicted_midi)
 
+    # Match notes with tolerance
+    def match_notes(gt_notes, pred_notes, tolerance):
+        matched = set()
+        unmatched_gt = set(gt_notes)
+        unmatched_pred = set(pred_notes)
+        for g_note in gt_notes:
+            for p_note in pred_notes:
+                if (
+                    g_note[0] == p_note[0] and  # Match pitch
+                    abs(g_note[1] - p_note[1]) <= tolerance and  # Timing tolerance
+                    g_note[2] == p_note[2]  # Match instrument
+                ):
+                    matched.add((g_note, p_note))
+                    unmatched_gt.discard(g_note)
+                    unmatched_pred.discard(p_note)
+        return matched, unmatched_gt, unmatched_pred
+
+    matched, unmatched_gt, unmatched_pred = match_notes(ground_truth_notes, predicted_notes, tolerance)
+
     # True Positives, False Positives, False Negatives
-    true_positives = len(ground_truth_notes & predicted_notes)
-    false_positives = len(predicted_notes - ground_truth_notes)
-    false_negatives = len(ground_truth_notes - predicted_notes)
+    true_positives = len(matched)
+    false_positives = len(unmatched_pred)
+    false_negatives = len(unmatched_gt)
 
     # Precision, Recall, F1-Score
     precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
