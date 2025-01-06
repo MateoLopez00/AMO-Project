@@ -1,3 +1,7 @@
+from collections import Counter
+import pretty_midi
+import numpy as np
+
 # Evaluate the orchestration
 def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
     """
@@ -31,7 +35,6 @@ def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
     }
 
 def evaluate_instrument_agnostic_metrics(ground_truth_midi_path, predicted_midi_path, tolerance=0.1):
-    import pretty_midi
 
     def extract_notes(midi):
         notes = []
@@ -56,3 +59,30 @@ def evaluate_instrument_agnostic_metrics(ground_truth_midi_path, predicted_midi_
     f1_score = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return {"Precision": precision, "Recall": recall, "F1-Score": f1_score}
+
+def pitch_class_entropy(midi_path):
+    midi = pretty_midi.PrettyMIDI(midi_path)
+    pitch_classes = [note.pitch % 12 for instrument in midi.instruments for note in instrument.notes]
+    pitch_counts = Counter(pitch_classes)
+    total_notes = sum(pitch_counts.values())
+    probabilities = [count / total_notes for count in pitch_counts.values()]
+    entropy = -sum(p * np.log2(p) for p in probabilities if p > 0)
+    return entropy
+
+def scale_consistency(midi_path, scale=[0, 2, 4, 5, 7, 9, 11]):  # Default: Major scale
+    midi = pretty_midi.PrettyMIDI(midi_path)
+    pitch_classes = [note.pitch % 12 for instrument in midi.instruments for note in instrument.notes]
+    in_scale = sum(1 for pitch in pitch_classes if pitch in scale)
+    total_notes = len(pitch_classes)
+    return in_scale / total_notes if total_notes > 0 else 0.0
+
+def average_polyphony(midi_path):
+    midi = pretty_midi.PrettyMIDI(midi_path)
+    times = sorted(set(note.start for instrument in midi.instruments for note in instrument.notes) |
+                   set(note.end for instrument in midi.instruments for note in instrument.notes))
+    polyphony = [
+        sum(1 for instrument in midi.instruments for note in instrument.notes if note.start <= t < note.end)
+        for t in times
+    ]
+    return np.mean(polyphony) if polyphony else 0.0
+
