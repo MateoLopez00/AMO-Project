@@ -34,32 +34,6 @@ def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
         "Range Appropriateness": evaluate_range_appropriateness()
     }
 
-def evaluate_instrument_agnostic_metrics(ground_truth_midi_path, predicted_midi_path, tolerance=0.1):
-
-    def extract_notes(midi):
-        notes = []
-        for instrument in midi.instruments:
-            for note in instrument.notes:
-                notes.append((note.pitch, note.start))
-        return set(notes)
-
-    ground_truth = pretty_midi.PrettyMIDI(ground_truth_midi_path)
-    predicted = pretty_midi.PrettyMIDI(predicted_midi_path)
-
-    ground_truth_notes = extract_notes(ground_truth)
-    predicted_notes = extract_notes(predicted)
-
-    matched = ground_truth_notes & predicted_notes
-    true_positives = len(matched)
-    false_positives = len(predicted_notes - ground_truth_notes)
-    false_negatives = len(ground_truth_notes - predicted_notes)
-
-    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
-    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
-    f1_score = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-
-    return {"Precision": precision, "Recall": recall, "F1-Score": f1_score}
-
 def pitch_class_entropy(midi_path):
     midi = pretty_midi.PrettyMIDI(midi_path)
     pitch_classes = [note.pitch % 12 for instrument in midi.instruments for note in instrument.notes]
