@@ -2,27 +2,28 @@ import partitura
 
 def extract_midi_features(midi_file):
     """
-    Extracts note features from a MIDI file, using the partitura library.
+    Extracts note features from a MIDI file using partitura.
+    Converts the score into a structured note array and extracts timing in beats.
     Args:
         midi_file (str): Path to the MIDI file.
     Returns:
-        List[Dict]: A list of dictionaries containing note features with beats.
+        List[Dict]: A list of dictionaries with note features.
     """
     # Load the MIDI file as a Score object
-    scores = partitura.load_score_midi(midi_file)
+    score = partitura.load_score_midi(midi_file)
 
-    # Prepare a list to hold note features
+    # Convert the score to a note array
+    note_array = partitura.utils.ensure_notearray(score)
+
+    # Prepare a list of dictionaries with note features
     note_features = []
-
-    # Loop through the parts (instruments) in the score
-    for part in scores.parts:
-        for note in part.notes:
-            note_features.append({
-                "pitch": note.pitch,  # MIDI pitch
-                "start": note.start.t,  # Start time in beats
-                "end": note.start.t + note.duration.t,  # End time in beats
-                "velocity": note.velocity,  # Note velocity
-                "instrument": part.id,  # Part name or instrument info
-            })
-
+    for note in note_array:
+        note_features.append({
+            "pitch": note["pitch"],  # MIDI pitch
+            "start": note["onset_beat"],  # Onset time in beats
+            "end": note["onset_beat"] + note["duration_beat"],  # End time in beats
+            "velocity": note["velocity"],  # MIDI velocity
+            "instrument": note.get("id_in_part", "Unknown")  # Part name (instrument proxy)
+        })
+    
     return note_features
