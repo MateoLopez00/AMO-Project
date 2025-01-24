@@ -6,14 +6,21 @@ def extract_midi_features(midi_file):
     Extracts note features from a MIDI file, ensuring instruments are properly named.
     Uses beats instead of seconds for timing.
     """
+    # Load the MIDI file as a partitura Score
     score = partitura.load_score_midi(midi_file)
-    notes = []
-    for note in score.notes:
-        notes.append({
-            "pitch": note.pitch,
-            "start": note.start.t / score.quarter_note_duration,  # Convert time to beats
-            "end": note.end.t / score.quarter_note_duration,      # Convert time to beats
-            "velocity": note.velocity,
-            "instrument": note.voice if hasattr(note, "voice") else "Unknown"
+    
+    # Extract notes from the score
+    notes = partitura.utils.get_notes(score)
+    
+    # Prepare a list to hold note features
+    note_features = []
+    for note in notes:
+        note_features.append({
+            "pitch": note["pitch"],
+            "start": note["onset_beat"],  # Use beats instead of seconds
+            "end": note["onset_beat"] + note["duration_beat"],  # Calculate end in beats
+            "velocity": note["velocity"],
+            "instrument": note.get("voice", "Unknown"),  # Use voice if available
         })
-    return notes
+    
+    return note_features
