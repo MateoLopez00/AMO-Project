@@ -7,34 +7,35 @@ def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
     """
     Evaluate the orchestration using pitch coverage, timing accuracy, and range appropriateness.
     """
+    # Nested function for pitch coverage
     def evaluate_pitch_coverage():
-        piano_pitches = set(note['pitch'] for note in piano_notes)
-        orchestration_pitches = set(note['pitch'] for note in orchestration_notes)
-        return len(piano_pitches & orchestration_pitches) / len(piano_pitches)
+        piano_pitches = set(note["pitch"] for note in piano_notes)
+        orchestration_pitches = set(note["pitch"] for note in orchestration_notes)
+        return len(piano_pitches & orchestration_pitches) / len(piano_pitches) if piano_pitches else 0
 
-    def evaluate_timing_accuracy(piano_notes, orchestration_notes, tolerance=0.25):
-        """
-        Evaluate timing accuracy using beats.
-        """
+    # Nested function for timing accuracy
+    def evaluate_timing_accuracy(tolerance=0.1):
         matches = sum(
-        any(abs(p['start'] - o['start']) <= tolerance and p['pitch'] == o['pitch']
-            for o in orchestration_notes)
-        for p in piano_notes
-    )
-        return matches / len(piano_notes) if piano_notes else 0.0
+            any(abs(p["start"] - o["start"]) <= tolerance and p["pitch"] == o["pitch"]
+                for o in orchestration_notes)
+            for p in piano_notes
+        )
+        return matches / len(piano_notes) if piano_notes else 0
 
+    # Nested function for range appropriateness
     def evaluate_range_appropriateness():
         out_of_range = sum(
-            not (instrument_ranges.get(note['instrument'], (0, 127))[0] <= note['pitch'] <=
-                 instrument_ranges.get(note['instrument'], (0, 127))[1])
+            not (instrument_ranges.get(note["instrument"], (0, 127))[0] <= note["pitch"] <=
+                 instrument_ranges.get(note["instrument"], (0, 127))[1])
             for note in orchestration_notes
         )
-        return 1 - out_of_range / len(orchestration_notes)
+        return 1 - out_of_range / len(orchestration_notes) if orchestration_notes else 0
 
+    # Call and return results from nested functions
     return {
         "Pitch Coverage": evaluate_pitch_coverage(),
         "Timing Accuracy": evaluate_timing_accuracy(),
-        "Range Appropriateness": evaluate_range_appropriateness()
+        "Range Appropriateness": evaluate_range_appropriateness(),
     }
 
 def pitch_class_entropy(midi_path):
