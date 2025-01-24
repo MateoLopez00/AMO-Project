@@ -3,8 +3,8 @@ import pretty_midi
 
 def extract_midi_features(midi_file):
     """
-    Extracts note features from a MIDI file using Partitura (symbolic data) 
-    and Pretty MIDI (velocity).
+    Extracts note features from a MIDI file using Partitura for symbolic attributes
+    and Pretty MIDI for velocity.
     
     Args:
         midi_file (str): Path to the MIDI file.
@@ -18,6 +18,10 @@ def extract_midi_features(midi_file):
     # Load performance data using Pretty MIDI
     midi_data = pretty_midi.PrettyMIDI(midi_file)
 
+    # Calculate tempo to convert seconds to beats
+    tempo = midi_data.get_tempo_changes()[1][0]  # Get the first tempo value
+    seconds_to_beats = lambda seconds: seconds * tempo / 60.0
+
     # Create a list of dictionaries for note features
     note_features = []
 
@@ -27,8 +31,8 @@ def extract_midi_features(midi_file):
         for note in instrument.notes:
             pretty_notes.append({
                 "pitch": note.pitch,
-                "start": note.start,
-                "end": note.end,
+                "start": seconds_to_beats(note.start),  # Convert seconds to beats
+                "end": seconds_to_beats(note.end),      # Convert seconds to beats
                 "velocity": note.velocity
             })
 
@@ -37,10 +41,10 @@ def extract_midi_features(midi_file):
 
     # Combine Partitura's note_array with Pretty MIDI velocities
     for note in note_array:
-        # Find the matching Pretty MIDI note (same pitch and time)
+        # Find the matching Pretty MIDI note (same pitch and time in beats)
         matching_notes = [
             pn for pn in pretty_notes
-            if abs(pn["start"] - note["onset_sec"]) < 0.01 and pn["pitch"] == note["pitch"]
+            if abs(pn["start"] - note["onset_beat"]) < 0.01 and pn["pitch"] == note["pitch"]
         ]
 
         velocity = matching_notes[0]["velocity"] if matching_notes else 100  # Default to 100
