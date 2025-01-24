@@ -22,6 +22,9 @@ def extract_midi_features(midi_file):
     tempo = midi_data.get_tempo_changes()[1][0]  # Get the first tempo value
     seconds_to_beats = lambda seconds: seconds * tempo / 60.0
 
+    # Map Partitura's note array to their parts
+    part_map = {part.id: part for part in score.parts}
+
     # Create a list of dictionaries for note features
     note_features = []
 
@@ -49,13 +52,17 @@ def extract_midi_features(midi_file):
 
         velocity = matching_notes[0]["velocity"] if matching_notes else 100  # Default to 100
 
+        # Get part (instrument) information
+        part_id = note["id"]  # ID of the part in Partitura
+        instrument = part_map[part_id].name if part_id in part_map else "Unknown"
+
         # Append the combined note attributes
         note_features.append({
             "pitch": note["pitch"],
             "start": note["onset_beat"],  # Timing in beats
             "end": note["onset_beat"] + note["duration_beat"],
             "velocity": velocity,
-            "instrument": note["id_in_part"]
+            "instrument": instrument  # Use Partitura's part name
         })
 
     return note_features
