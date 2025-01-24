@@ -8,9 +8,9 @@ def extract_midi_features(midi_file):
     """
     # Load the MIDI file as a performance object
     performance = partitura.load_performance_midi(midi_file)
-
-    # Convert the performance into a note array
-    note_array = partitura.performance.to_note_array(performance)
+    
+    # Extract notes as an array
+    note_array = partitura.utils.note_array_from_performance(performance)
 
     # Prepare a list to hold note features
     note_features = []
@@ -20,7 +20,7 @@ def extract_midi_features(midi_file):
             "start": note["onset_beat"],  # Onset time in beats
             "end": note["onset_beat"] + note["duration_beat"],  # End time in beats
             "velocity": note["velocity"],  # Note velocity
-            "instrument": note.get("track", "Unknown"),  # Use `track` as instrument info
+            "instrument": note.get("track", "Unknown"),  # Track info as instrument proxy
         })
-    
+
     return note_features
