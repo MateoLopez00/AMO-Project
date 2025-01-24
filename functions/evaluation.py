@@ -12,13 +12,16 @@ def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
         orchestration_pitches = set(note['pitch'] for note in orchestration_notes)
         return len(piano_pitches & orchestration_pitches) / len(piano_pitches)
 
-    def evaluate_timing_accuracy(tolerance=0.1):
+    def evaluate_timing_accuracy(piano_notes, orchestration_notes, tolerance=0.25):
+        """
+        Evaluate timing accuracy using beats.
+        """
         matches = sum(
-            any(abs(p['start'] - o['start']) <= tolerance and p['pitch'] == o['pitch']
-                for o in orchestration_notes)
-            for p in piano_notes
-        )
-        return matches / len(piano_notes)
+        any(abs(p['start'] - o['start']) <= tolerance and p['pitch'] == o['pitch']
+            for o in orchestration_notes)
+        for p in piano_notes
+    )
+        return matches / len(piano_notes) if piano_notes else 0.0
 
     def evaluate_range_appropriateness():
         out_of_range = sum(

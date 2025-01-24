@@ -1,20 +1,19 @@
-import pretty_midi
+import partitura
 
 # Load and process MIDI files
 def extract_midi_features(midi_file):
     """
     Extracts note features from a MIDI file, ensuring instruments are properly named.
+    Uses beats instead of seconds for timing.
     """
-    midi_data = pretty_midi.PrettyMIDI(midi_file)
+    score = partitura.load_score_midi(midi_file)
     notes = []
-    for instrument in midi_data.instruments:
-        instrument_name = instrument.name if instrument.name else "Unknown"
-        for note in instrument.notes:
-            notes.append({
-                "pitch": note.pitch,
-                "start": note.start,
-                "end": note.end,
-                "velocity": note.velocity,
-                "instrument": instrument_name
-            })
+    for note in score.notes:
+        notes.append({
+            "pitch": note.pitch,
+            "start": note.start.t / score.quarter_note_duration,  # Convert time to beats
+            "end": note.end.t / score.quarter_note_duration,      # Convert time to beats
+            "velocity": note.velocity,
+            "instrument": note.voice if hasattr(note, "voice") else "Unknown"
+        })
     return notes
