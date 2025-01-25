@@ -66,3 +66,29 @@ def extract_midi_features(midi_file):
         })
 
     return note_features
+
+    import partitura
+
+def get_meter_partitura(midi_file):
+    """
+    Extracts the meter (time signature) of a MIDI file using Partitura.
+
+    Args:
+        midi_file (str): Path to the MIDI file.
+
+    Returns:
+        List[Dict]: A list of dictionaries with time signature and corresponding beat time.
+    """
+    # Load the MIDI file as a Partitura score
+    score = partitura.load_score_midi(midi_file)
+
+    # Extract time signature changes
+    meters = []
+    for ts in score.time_signatures:
+        meters.append({
+            "numerator": ts.beats,           # Beats per measure
+            "denominator": ts.beat_type,    # Beat type (e.g., quarter note)
+            "time": ts.start_t / score.ppq  # Convert ticks to beats
+        })
+
+    return meters
