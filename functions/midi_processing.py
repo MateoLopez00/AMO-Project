@@ -67,8 +67,6 @@ def extract_midi_features(midi_file):
 
     return note_features
 
-    import partitura
-
 def get_meter_partitura(midi_file):
     """
     Extracts the meter (time signature) of a MIDI file using Partitura.
