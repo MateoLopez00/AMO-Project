@@ -75,7 +75,7 @@ def get_meter_partitura(midi_file):
         midi_file (str): Path to the MIDI file.
 
     Returns:
-        List[Dict]: A list of dictionaries with time signature and corresponding beat positions.
+        List[Dict]: A list of dictionaries with time signature and corresponding start times.
     """
     # Load the MIDI file as a Partitura score
     score = partitura.load_score_midi(midi_file)
@@ -84,10 +84,12 @@ def get_meter_partitura(midi_file):
     meters = []
     for part in score.parts:  # Iterate over parts in the score
         for ts in part.iter_all(partitura.score.TimeSignature):  # Extract time signatures
+            # Retrieve the start time (convert TimePoint to beats if necessary)
+            start_time = ts.start.t  # Extract the time in ticks or beats
             meters.append({
-                "numerator": ts.beats,          # Beats per measure
-                "denominator": ts.beat_type,   # Beat type (e.g., quarter note)
-                "time": ts.start_tick / score.ppq  # Convert ticks to beats
+                "numerator": ts.beats,           # Beats per measure
+                "denominator": ts.beat_type,    # Beat type (e.g., quarter note)
+                "time": start_time              # Start time in beats
             })
 
     return meters
