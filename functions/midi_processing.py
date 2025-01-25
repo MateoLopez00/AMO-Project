@@ -77,6 +77,10 @@ def get_meter_partitura(midi_file):
     Returns:
         List[Dict]: A list of dictionaries with time signature and corresponding start times in beats.
     """
+    # Load the MIDI file as a performance to extract PPQ
+    performance = partitura.load_performance_midi(midi_file)
+    ppq = performance.ppq  # Get the PPQ value (ticks per quarter note)
+
     # Load the MIDI file as a Partitura score
     score = partitura.load_score_midi(midi_file)
 
@@ -85,7 +89,7 @@ def get_meter_partitura(midi_file):
     for part in score.parts:  # Iterate over parts in the score
         for ts in part.iter_all(partitura.score.TimeSignature):  # Extract time signatures
             # Convert start time from ticks to beats
-            start_time_in_beats = ts.start.t / score.ppq if ts.start and score.ppq else 0
+            start_time_in_beats = ts.start.t / ppq if ts.start else 0
 
             meters.append({
                 "numerator": ts.beats,           # Beats per measure
