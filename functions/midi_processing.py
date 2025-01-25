@@ -69,32 +69,34 @@ def extract_midi_features(midi_file):
 
 def get_meter_partitura(midi_file):
     """
-    Extracts the meter (time signature) of a MIDI file using Partitura and converts times to beats.
-
+    Extracts the meter (time signature) from a MIDI file using Partitura.
+    
     Args:
         midi_file (str): Path to the MIDI file.
 
     Returns:
-        List[Dict]: A list of dictionaries with time signature and corresponding start times in beats.
+        List[Dict]: A list of dictionaries with meter information.
     """
-    # Load the MIDI file as a performance to extract PPQ
+    # Load the MIDI file as a performance to access the note array
     performance = partitura.load_performance_midi(midi_file)
-    ppq = performance.ppq  # Get the PPQ value (ticks per quarter note)
+    note_array = performance.note_array()
 
-    # Load the MIDI file as a Partitura score
+    # Use the PPQ (ticks per quarter note) to convert ticks to beats
+    ppq = performance.ppq if hasattr(performance, "ppq") else 480  # Default to 480 if ppq is unavailable
+
+    # Load the MIDI file as a score to extract time signatures
     score = partitura.load_score_midi(midi_file)
 
-    # Extract time signature changes
+    # Collect time signatures
     meters = []
-    for part in score.parts:  # Iterate over parts in the score
-        for ts in part.iter_all(partitura.score.TimeSignature):  # Extract time signatures
-            # Convert start time from ticks to beats
+    for part in score.parts:
+        for ts in part.iter_all(partitura.score.TimeSignature):
+            # Convert the start time from ticks to beats
             start_time_in_beats = ts.start.t / ppq if ts.start else 0
-
             meters.append({
                 "numerator": ts.beats,           # Beats per measure
                 "denominator": ts.beat_type,    # Beat type (e.g., quarter note)
-                "time_in_beats": start_time_in_beats  # Start time converted to beats
+                "time_in_beats": start_time_in_beats  # Start time in beats
             })
 
     return meters
