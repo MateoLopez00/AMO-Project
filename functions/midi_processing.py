@@ -82,11 +82,12 @@ def get_meter_partitura(midi_file):
 
     # Extract time signature changes
     meters = []
-    for ts in score.time_signatures:
-        meters.append({
-            "numerator": ts.beats,           # Beats per measure
-            "denominator": ts.beat_type,    # Beat type (e.g., quarter note)
-            "time": ts.start_t / score.ppq  # Convert ticks to beats
-        })
+    for part in score.parts:  # Iterate over parts in the score
+        for ts in part.iter_all(partitura.score.TimeSignature):  # Extract time signatures
+            meters.append({
+                "numerator": ts.beats,           # Beats per measure
+                "denominator": ts.beat_type,    # Beat type (e.g., quarter note)
+                "time": ts.start_t / score.ppq  # Convert ticks to beats
+            })
 
     return meters
