@@ -17,22 +17,21 @@ def plot_piano_roll(notes, title="Piano Roll (Beats)", ax=None):
     return ax
 
 # Plot polyphony over time
-def plot_polyphony(orchestration_notes):
-    """
-    Plot the polyphony (number of active notes) over time using beats.
-    """
-    times = sorted(set(note['start'] for note in orchestration_notes) |
-                   set(note['end'] for note in orchestration_notes))
-    polyphony = [
-        sum(1 for note in orchestration_notes if note['start'] <= t < note['end'])
-        for t in times
-    ]
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(times, polyphony, label="Polyphony")
-    plt.xlabel("Beats")
-    plt.ylabel("Number of Notes")
-    plt.title("Polyphony Over Time (Beats)")
-    plt.legend()
-    plt.grid()
-    plt.show()
+def plot_polyphony(notes, title="Polyphony Over Time (Beats)", ax=None):
+    # Calculate the time points from note start and end times.
+    times = sorted(set(note['start'] for note in notes) | set(note['end'] for note in notes))
+    # Calculate polyphony at each time point.
+    polyphony = [sum(1 for note in notes if note['start'] <= t < note['end']) for t in times]
+    
+    # If no axis is provided, create one.
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        
+    # Plot the polyphony curve.
+    ax.plot(times, polyphony, label="Polyphony", color='green')
+    ax.set_xlabel("Beats")
+    ax.set_ylabel("Number of Notes")
+    ax.set_title(title)
+    ax.legend()
+    ax.grid(True)
+    return ax
