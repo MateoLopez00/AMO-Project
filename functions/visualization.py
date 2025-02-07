@@ -1,18 +1,20 @@
 import matplotlib.pyplot as plt
 
-# Plot the piano roll for visualization
-def plot_piano_roll(notes, title="Piano Roll (Beats)"):
-    """
-    Plot the piano roll using beats instead of seconds.
-    """
-    plt.figure(figsize=(10, 6))
+def plot_piano_roll(notes, title="Piano Roll (Beats)", ax=None):
+    # If no axis is provided, create a new one.
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plot each note as a horizontal line from start to end at the note's pitch.
     for note in notes:
-        plt.plot([note['start'], note['end']], [note['pitch'], note['pitch']], color='blue')
-    plt.xlabel("Beats")
-    plt.ylabel("Pitch")
-    plt.title(title)
-    plt.grid()
-    plt.show()
+        ax.plot([note['start'], note['end']], [note['pitch'], note['pitch']], color='blue')
+    
+    ax.set_xlabel("Beats")
+    ax.set_ylabel("Pitch")
+    ax.set_title(title)
+    ax.grid(True)
+    
+    return ax
 
 # Plot polyphony over time
 def plot_polyphony(orchestration_notes):
