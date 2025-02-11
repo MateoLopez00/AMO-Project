@@ -6,42 +6,45 @@ def limit_range(notes, min_pitch, max_pitch):
 
 # Create and populate pretty_midi instruments
 def create_and_assign_instruments_dynamic(layer_notes, instrument_combos, combo1_duration=16, combo2_duration=8):
-    instruments_dict = {}
+    instruments_dict = {}  # Key: (layer, combo_id, inst_name), Value: PrettyMIDI Instrument object
     orchestration_notes = []
 
     for layer, notes in layer_notes.items():
         for note in notes:
+            # Determine the current combo based on the note's start time.
             combo_id = get_combo_for_beat(note['start'], combo1_duration, combo2_duration)
-            inst_info = instrument_combos[combo_id][layer]  # e.g., ("Violin", 55, 103)
-            inst_name, min_pitch, max_pitch = inst_info
+            # Get the list of candidate instruments for this layer in the current combo.
+            candidate_instruments = instrument_combos[combo_id][layer]
+            
+            # For Option A, assign the note to every candidate instrument whose range covers the note.
+            for inst_info in candidate_instruments:
+                inst_name, min_pitch, max_pitch = inst_info
+                
+                # Check if the note's pitch falls within the candidate instrument's range.
+                if min_pitch <= note['pitch'] <= max_pitch:
+                    # Create a unique key based on layer, combo, and instrument name.
+                    key = (layer, combo_id, inst_name)
+                    if key not in instruments_dict:
+                        # Create a PrettyMIDI instrument object using the valid instrument name.
+                        program = pretty_midi.instrument_name_to_program(inst_name)
+                        instrument_obj = pretty_midi.Instrument(program=program, name=f"{inst_name}_{layer}_{combo_id}")
+                        instruments_dict[key] = instrument_obj
 
-            # Check if the note is below the current instrument's range.
-            if note['pitch'] < min_pitch:
-                # Reassign to a valid low instrument, "Contrabass", which is recognized by Pretty MIDI.
-                inst_name = "Contrabass"
-                # Define an extended lower range for Contrabass, for example:
-                min_pitch, max_pitch = 20, 60
-
-            # Optionally, you can also check if note['pitch'] > max_pitch if needed.
-            note['instrument'] = inst_name
-
-            # Include instrument name in the key to distinguish instruments if needed.
-            key = (layer, combo_id, inst_name)
-            if key not in instruments_dict:
-                program = pretty_midi.instrument_name_to_program(inst_name)
-                instrument_obj = pretty_midi.Instrument(program=program, name=f"{inst_name}_{layer}_{combo_id}")
-                instruments_dict[key] = instrument_obj
-
-            pm_note = pretty_midi.Note(
-                velocity=note['velocity'],
-                pitch=note['pitch'],
-                start=note['start'],
-                end=note['end']
-            )
-            instruments_dict[key].notes.append(pm_note)
+                    # Create a PrettyMIDI note and add it to this instrument.
+                    pm_note = pretty_midi.Note(
+                        velocity=note['velocity'],
+                        pitch=note['pitch'],
+                        start=note['start'],
+                        end=note['end']
+                    )
+                    instruments_dict[key].notes.append(pm_note)
+            
+            # Optionally, add the note to orchestration_notes once (for evaluation/visualization),
+            # even though it may be played by multiple instruments.
             orchestration_notes.append(note)
 
     return list(instruments_dict.values()), orchestration_notes
+
 
 
 def get_combo_for_beat(beat, combo1_duration=16, combo2_duration=8):
