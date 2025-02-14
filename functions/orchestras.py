@@ -33,39 +33,5 @@ def orchestra_database():
     instruments['max_rage'] = instruments['max_rage'].astype(int)
     instruments['name'] = instruments['name'].astype(str)
     
-    combos = pd.DataFrame([(1, 'Tuti'), 
-                           (2, 'Strings'),
-                           (3, 'Woods'),
-                           (4, 'Brasses'),
-                           (5, 'Strings-Woods'),
-                           (6, 'Strings-Brasses')],  
-                      columns=["idc", "name"])
-    combos['idc'] = combos['idc'].astype(int)
-    combos['name'] = combos['name'].astype(str)
-    
-    combo_inst = pd.DataFrame([
-                       (1, 41),
-                       (1, 42),
-                       (1, 43),
-                       (1, 73),
-                       (1, 68),
-                       (1, 71),
-                       (1, 70),
-                       (1, 60),
-                       (1, 56),
-                       (2, 40), 
-                       (2, 41),
-                       (2, 42),
-                       (2, 43),
-                       (3, 73),
-                       (3, 68),
-                       (3, 71),
-                       (3, 70),
-                       (4, 60),
-                       (4, 56)
-                       ],  
-                  columns=["idc", "idi"])
-    combo_inst['idc'] = combo_inst['idc'].astype(int)
-    combo_inst['idi'] = combo_inst['idi'].astype(int)
-    return instruments, combos, combo_inst
+    return instruments
 
