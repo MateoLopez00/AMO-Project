@@ -16,10 +16,19 @@ def plot_piano_roll(notes, title="Piano Roll (Beats)", ax=None):
     return ax
 
 def plot_polyphony(notes, title="Polyphony Over Time (Beats)", ax=None):
-    # Use vectorized operations:
-    times = np.unique(np.concatenate((notes['start'], notes['end'])))
-    # For each time point, count how many notes are active using vectorized comparisons.
-    polyphony = [np.sum((notes['start'] <= t) & (notes['end'] > t)) for t in times]
+    # Check if notes is a list of dicts
+    if isinstance(notes, list):
+        start_vals = np.array([note['start'] for note in notes])
+        end_vals = np.array([note['end'] for note in notes])
+    else:
+        # Assume notes is a structured array with 'start' and 'end' fields.
+        start_vals = notes['start']
+        end_vals = notes['end']
+    
+    # Use vectorized operations to get unique time points.
+    times = np.unique(np.concatenate((start_vals, end_vals)))
+    # For each time point, count how many notes are active.
+    polyphony = [np.sum((start_vals <= t) & (end_vals > t)) for t in times]
     
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 5))
