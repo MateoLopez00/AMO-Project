@@ -1,8 +1,5 @@
 from music21 import converter, instrument, note, chord, meter
 
-# Scaling factor to convert Music21 quarter lengths to the expected beat scale.
-SCALING_FACTOR = 0.5333
-
 def extract_midi_features(midi_file):
     """
     Extract note features from a MIDI file using music21.
@@ -11,8 +8,8 @@ def extract_midi_features(midi_file):
         List[Dict]: A list of dictionaries with note features.
                     Each dictionary contains:
                     - "pitch": MIDI pitch number
-                    - "start": onset time in beats (after scaling)
-                    - "end": offset time in beats (after scaling)
+                    - "start": onset time in quarter lengths (raw from music21)
+                    - "end": offset time in quarter lengths (raw from music21)
                     - "velocity": note velocity (defaulted to 100 if unavailable)
                     - "instrument": instrument name (extracted from the part)
     """
@@ -29,24 +26,24 @@ def extract_midi_features(midi_file):
         for element in part.flat.notes:
             # For single notes
             if isinstance(element, note.Note):
-                start_scaled = element.offset * SCALING_FACTOR
-                end_scaled = (element.offset + element.quarterLength) * SCALING_FACTOR
+                start = element.offset
+                end = element.offset + element.quarterLength
                 note_features.append({
                     "pitch": element.pitch.midi,
-                    "start": start_scaled,
-                    "end": end_scaled,
+                    "start": start,
+                    "end": end,
                     "velocity": element.volume.velocity if element.volume.velocity is not None else 100,
                     "instrument": instr_name
                 })
             # For chords, add each note individually
             elif isinstance(element, chord.Chord):
                 for n in element:
-                    start_scaled = element.offset * SCALING_FACTOR
-                    end_scaled = (element.offset + element.quarterLength) * SCALING_FACTOR
+                    start = element.offset
+                    end = element.offset + element.quarterLength
                     note_features.append({
                         "pitch": n.pitch.midi,
-                        "start": start_scaled,
-                        "end": end_scaled,
+                        "start": start,
+                        "end": end,
                         "velocity": n.volume.velocity if n.volume.velocity is not None else 100,
                         "instrument": instr_name
                     })
@@ -64,7 +61,7 @@ def get_meter(midi_file):
                     Each dictionary contains:
                     - "numerator": beats per measure
                     - "denominator": beat unit (e.g., 4 for quarter note)
-                    - "time_in_beats": the beat at which the time signature occurs (after scaling)
+                    - "time_in_beats": the beat at which the time signature occurs (using raw quarter lengths)
     """
     score = converter.parse(midi_file)
     ts_list = score.flat.getElementsByClass(meter.TimeSignature)
@@ -74,7 +71,7 @@ def get_meter(midi_file):
         meters.append({
             "numerator": ts.numerator,
             "denominator": ts.denominator,
-            "time_in_beats": ts.offset * SCALING_FACTOR
+            "time_in_beats": ts.offset
         })
     
     # Sort meters by their occurrence in the piece
