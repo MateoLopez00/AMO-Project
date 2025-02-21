@@ -9,8 +9,10 @@ def create_and_assign_instruments_dynamic(layer_notes, instrument_combos, combo1
     instruments_dict = {}  # Key: (layer, combo_id, inst_name), Value: PrettyMIDI Instrument object
     orchestration_notes = []
 
+    # Loop over each layer from layer_notes (which might be a NumPy structured array or a list)
     for layer, notes in layer_notes.items():
-        for note in notes:
+        # IMPORTANT: Iterate over the current layer's notes (not an undefined variable)
+        for note in notes:  # Changed from "for note in note_array:" to "for note in notes:"
             # Determine the current combo based on the note's start time.
             combo_id = get_combo_for_beat(note['start'], combo1_duration, combo2_duration)
             # Get the list of candidate instruments for this layer in the current combo.
@@ -45,8 +47,6 @@ def create_and_assign_instruments_dynamic(layer_notes, instrument_combos, combo1
 
     return list(instruments_dict.values()), orchestration_notes
 
-
-
 def get_combo_for_beat(beat, combo1_duration=16, combo2_duration=8):
     """
     Given a beat value, decide which combo to use.
@@ -59,4 +59,3 @@ def get_combo_for_beat(beat, combo1_duration=16, combo2_duration=8):
         return "combo1"
     else:
         return "combo2"
-
