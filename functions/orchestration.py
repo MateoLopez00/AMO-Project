@@ -4,15 +4,14 @@ import pretty_midi
 def limit_range(notes, min_pitch, max_pitch):
     return [note for note in notes if min_pitch <= note['pitch'] <= max_pitch]
 
-# Create and populate pretty_midi instruments
+# Create and populate PrettyMIDI instruments
 def create_and_assign_instruments_dynamic(layer_notes, instrument_combos, combo1_duration=16, combo2_duration=8):
     instruments_dict = {}  # Key: (layer, combo_id, inst_name), Value: PrettyMIDI Instrument object
     orchestration_notes = []
 
     # Loop over each layer from layer_notes (which might be a NumPy structured array or a list)
     for layer, notes in layer_notes.items():
-        # IMPORTANT: Iterate over the current layer's notes (not an undefined variable)
-        for note in notes:  # Changed from "for note in note_array:" to "for note in notes:"
+        for note in notes:  # Iterate over the current layer's notes
             # Determine the current combo based on the note's start time.
             combo_id = get_combo_for_beat(note['start'], combo1_duration, combo2_duration)
             # Get the list of candidate instruments for this layer in the current combo.
@@ -41,8 +40,7 @@ def create_and_assign_instruments_dynamic(layer_notes, instrument_combos, combo1
                     )
                     instruments_dict[key].notes.append(pm_note)
             
-            # Optionally, add the note to orchestration_notes once (for evaluation/visualization),
-            # even though it may be played by multiple instruments.
+            # Optionally, add the note to orchestration_notes once (for evaluation/visualization).
             orchestration_notes.append(note)
 
     return list(instruments_dict.values()), orchestration_notes
