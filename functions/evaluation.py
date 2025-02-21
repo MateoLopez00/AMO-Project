@@ -20,7 +20,7 @@ def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
                 for o in orchestration_notes)
             for p in piano_notes
         )
-        return matches / len(piano_notes) if piano_notes else 0
+        return matches / len(piano_notes) if len(piano_notes) > 0 else 0
 
     # Nested function for range appropriateness
     def evaluate_range_appropriateness():
