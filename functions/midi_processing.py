@@ -10,8 +10,9 @@ def extract_midi_features(midi_file):
     # Loop through each part in the score, using enumerate to get the part index.
     for i, part in enumerate(score.parts):
         # Use the corresponding PrettyMIDI instrument, if available.
+        # Use getattr to safely extract the channel attribute (default to -1 if missing)
         if i < len(midi_data.instruments):
-            channel = midi_data.instruments[i].channel
+            channel = getattr(midi_data.instruments[i], 'channel', -1)
         else:
             channel = -1
         
@@ -39,7 +40,7 @@ def extract_midi_features(midi_file):
                         channel
                     ))
     
-    # Define a structured dtype including the 'channel' field.
+    # Define a structured dtype for our note data with the additional 'channel' field.
     note_dtype = np.dtype([
         ('pitch', np.int32),
         ('start', np.float64),
@@ -62,7 +63,7 @@ def get_meter(midi_file):
         meters.append({
             "numerator": ts.numerator,
             "denominator": ts.denominator,
-            "time_in_beats": ts.offset
+            "time_in_beats": ts.offset  # Using raw quarter lengths here
         })
     
     meters.sort(key=lambda x: x["time_in_beats"])
