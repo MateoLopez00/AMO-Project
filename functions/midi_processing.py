@@ -7,29 +7,44 @@ def extract_midi_features(midi_file):
     
     # Loop through each part in the score.
     for part in score.parts:
+        # Extract the instrument object and get its MIDI channel if available; otherwise default to -1.
+        instr_obj = part.getInstrument()
+        channel = instr_obj.midiChannel if hasattr(instr_obj, 'midiChannel') and instr_obj.midiChannel is not None else -1
+        
         # We no longer extract the instrument name.
         for element in part.flat.notes:
             if isinstance(element, note.Note):
                 start = element.offset
                 end = element.offset + element.quarterLength
-                note_list.append((element.pitch.midi, start, end,
-                                  element.volume.velocity if element.volume.velocity is not None else 100))
+                note_list.append((
+                    element.pitch.midi, 
+                    start, 
+                    end,
+                    element.volume.velocity if element.volume.velocity is not None else 100,
+                    channel
+                ))
             elif isinstance(element, chord.Chord):
                 for n in element:
                     start = element.offset
                     end = element.offset + element.quarterLength
-                    note_list.append((n.pitch.midi, start, end,
-                                      n.volume.velocity if n.volume.velocity is not None else 100))
+                    note_list.append((
+                        n.pitch.midi, 
+                        start, 
+                        end,
+                        n.volume.velocity if n.volume.velocity is not None else 100,
+                        channel
+                    ))
     
-    # Define a structured dtype for our note data without the instrument field.
+    # Define a structured dtype for our note data with the additional 'channel' field.
     note_dtype = np.dtype([
         ('pitch', np.int32),
         ('start', np.float64),
         ('end', np.float64),
-        ('velocity', np.int32)
+        ('velocity', np.int32),
+        ('channel', np.int32)
     ])
     
-    # Convert list of tuples to a NumPy structured array.
+    # Convert the list of tuples to a NumPy structured array.
     note_array = np.array(note_list, dtype=note_dtype)
     
     # Optionally sort the array by start time then pitch.
