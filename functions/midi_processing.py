@@ -1,17 +1,21 @@
 import numpy as np
 from music21 import converter, note, chord, meter
+import pretty_midi
 
 def extract_midi_features(midi_file):
     score = converter.parse(midi_file)
+    midi_data = pretty_midi.PrettyMIDI(midi_file)  # Use PrettyMIDI to extract channel info
     note_list = []
     
-    # Loop through each part in the score.
-    for part in score.parts:
-        # Extract the instrument object and get its MIDI channel if available; otherwise default to -1.
-        instr_obj = part.getInstrument()
-        channel = instr_obj.midiChannel if hasattr(instr_obj, 'midiChannel') and instr_obj.midiChannel is not None else -1
+    # Loop through each part in the score, using enumerate to get the part index.
+    for i, part in enumerate(score.parts):
+        # Use the corresponding PrettyMIDI instrument, if available.
+        if i < len(midi_data.instruments):
+            channel = midi_data.instruments[i].channel
+        else:
+            channel = -1
         
-        # We no longer extract the instrument name.
+        # Process all notes/chords in the part.
         for element in part.flat.notes:
             if isinstance(element, note.Note):
                 start = element.offset
@@ -35,7 +39,7 @@ def extract_midi_features(midi_file):
                         channel
                     ))
     
-    # Define a structured dtype for our note data with the additional 'channel' field.
+    # Define a structured dtype including the 'channel' field.
     note_dtype = np.dtype([
         ('pitch', np.int32),
         ('start', np.float64),
@@ -46,22 +50,10 @@ def extract_midi_features(midi_file):
     
     # Convert the list of tuples to a NumPy structured array.
     note_array = np.array(note_list, dtype=note_dtype)
-    
-    # Optionally sort the array by start time then pitch.
     note_array = np.sort(note_array, order=['start', 'pitch'])
     return note_array
 
 def get_meter(midi_file):
-    """
-    Extracts meter (time signature) information from a MIDI file using music21.
-    
-    Returns:
-        List[Dict]: A list of dictionaries with meter information.
-                    Each dictionary contains:
-                    - "numerator": beats per measure
-                    - "denominator": beat unit (e.g., 4 for quarter note)
-                    - "time_in_beats": the beat at which the time signature occurs (using raw quarter lengths)
-    """
     score = converter.parse(midi_file)
     ts_list = score.flat.getElementsByClass(meter.TimeSignature)
     meters = []
@@ -73,6 +65,5 @@ def get_meter(midi_file):
             "time_in_beats": ts.offset
         })
     
-    # Sort meters by their occurrence in the piece.
     meters.sort(key=lambda x: x["time_in_beats"])
     return meters
