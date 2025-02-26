@@ -6,7 +6,8 @@ import mido
 def extract_channels(midi_file):
     """
     Extract a mapping from track index to MIDI channel using mido.
-    For each track, return the channel from the first note_on or note_off message,
+    Returns a dictionary mapping track indices to a channel.
+    For each track, we take the first note_on/note_off message's channel,
     defaulting to 0 if none is found.
     """
     midi_mido = mido.MidiFile(midi_file)
@@ -23,24 +24,22 @@ def extract_channels(midi_file):
 def extract_midi_features(midi_file):
     score = converter.parse(midi_file)
     midi_data = pretty_midi.PrettyMIDI(midi_file)
-    # Use mido to extract channel mapping.
     channels_mapping = extract_channels(midi_file)
     
     note_list = []
     
     # Loop through each part in the Music21 score using enumerate.
     for i, part in enumerate(score.parts):
-        # Use the corresponding channel from the mido mapping, defaulting to 0.
+        # Use the corresponding channel from mido's mapping; default to 0.
         channel = channels_mapping.get(i, 0)
         
-        # Process all notes/chords in this part.
         for element in part.flat.notes:
             if isinstance(element, note.Note):
                 start = element.offset
                 end = element.offset + element.quarterLength
                 note_list.append((
-                    element.pitch.midi, 
-                    start, 
+                    element.pitch.midi,
+                    start,
                     end,
                     element.volume.velocity if element.volume.velocity is not None else 100,
                     channel
@@ -50,14 +49,14 @@ def extract_midi_features(midi_file):
                     start = element.offset
                     end = element.offset + element.quarterLength
                     note_list.append((
-                        n.pitch.midi, 
-                        start, 
+                        n.pitch.midi,
+                        start,
                         end,
                         n.volume.velocity if n.volume.velocity is not None else 100,
                         channel
                     ))
     
-    # Define a structured dtype for our note data including the 'channel' field.
+    # Define a structured dtype for note data (using raw quarter lengths).
     note_dtype = np.dtype([
         ('pitch', np.int32),
         ('start', np.float64),
@@ -71,6 +70,10 @@ def extract_midi_features(midi_file):
     return note_array
 
 def get_meter(midi_file):
+    """
+    Extracts meter (time signature) information from a MIDI file using Music21.
+    Returns a list of dictionaries for each time signature event.
+    """
     score = converter.parse(midi_file)
     ts_list = score.flat.getElementsByClass(meter.TimeSignature)
     meters = []
@@ -79,7 +82,7 @@ def get_meter(midi_file):
         meters.append({
             "numerator": ts.numerator,
             "denominator": ts.denominator,
-            "time_in_beats": ts.offset
+            "time_in_beats": ts.offset  # Using raw quarter lengths.
         })
     
     meters.sort(key=lambda x: x["time_in_beats"])
