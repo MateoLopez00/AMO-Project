@@ -5,7 +5,7 @@ desired_channels = {
     'Violin': 1,
     'Viola': 2,
     'Cello': 3,
-    'Bass': 4,           # or "Acoustic Bass", if you use that name
+    'Bass': 4,           # For example, if you use "Bass" to mean Acoustic Bass.
     'Flute': 5,
     'Oboe': 6,
     'Clarinet': 7,
@@ -14,9 +14,6 @@ desired_channels = {
     'Trumpet': 10,
     'Tuba': 11
 }
-
-def limit_range(notes, min_pitch, max_pitch):
-    return [note for note in notes if min_pitch <= note['pitch'] <= max_pitch]
 
 def create_and_assign_instruments_dynamic(layer_notes, instrument_combos, combo1_duration=16, combo2_duration=8):
     instruments_dict = {}  # Key: (layer, combo_id, inst_name) --> value: PrettyMIDI Instrument object
@@ -48,6 +45,7 @@ def create_and_assign_instruments_dynamic(layer_notes, instrument_combos, combo1
                             name=f"{inst_name}_{layer}_{combo_id}",
                             is_drum=False
                         )
+                        # Assign channel based on our desired mapping.
                         instrument_obj.channel = desired_channels.get(inst_name, 0)
                         instruments_dict[key] = instrument_obj
                     # Append the candidate instrument's channel.
@@ -62,9 +60,7 @@ def create_and_assign_instruments_dynamic(layer_notes, instrument_combos, combo1
                     instruments_dict[key].notes.append(pm_note)
             orchestration_notes_detailed.append(note_dict)
     
-    # Sort detailed orchestration notes by ascending start time.
-    orchestration_notes_detailed.sort(key=lambda x: x['start'])
-    
+    # Removed the sort so that orchestration_notes_detailed remains in processing order.
     return list(instruments_dict.values()), orchestration_notes_detailed
 
 def get_combo_for_beat(beat, combo1_duration=16, combo2_duration=8):
