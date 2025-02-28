@@ -5,13 +5,14 @@ desired_channels = {
     'Violin': 1,
     'Viola': 2,
     'Cello': 3,
-    'Bass': 4,           # For example, if you use "Bass" to mean Acoustic Bass.
+    'Bass': 4,           # or "Acoustic Bass", if you use that name
     'Flute': 5,
     'Oboe': 6,
     'Clarinet': 7,
     'Bassoon': 8,
     'French Horn': 9,
-    'Trumpet': 10
+    'Trumpet': 10,
+    'Tuba': 11
 }
 
 def limit_range(notes, min_pitch, max_pitch):
