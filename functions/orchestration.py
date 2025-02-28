@@ -5,7 +5,7 @@ desired_channels = {
     'Violin': 1,
     'Viola': 2,
     'Cello': 3,
-    'Bass': 4,           # For example, if you use "Bass" to mean Acoustic Bass.
+    'Acoustic Bass': 4,
     'Flute': 5,
     'Oboe': 6,
     'Clarinet': 7,
