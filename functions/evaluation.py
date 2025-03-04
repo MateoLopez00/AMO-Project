@@ -1,17 +1,15 @@
 from collections import Counter
 import pretty_midi
 import numpy as np
+from orchestration import get_combo_for_beat
 
 # Evaluate the orchestration
-def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
-    """
-    Evaluate the orchestration using pitch coverage, timing accuracy, and range appropriateness.
-    """
+def evaluate_orchestration(piano_notes, orchestration_notes, instrument_combos, combo1_duration=16, combo2_duration=8):
     # Nested function for pitch coverage
     def evaluate_pitch_coverage():
         piano_pitches = set(note["pitch"] for note in piano_notes)
         orchestration_pitches = set(note["pitch"] for note in orchestration_notes)
-        return len(piano_pitches & orchestration_pitches) / len(piano_pitches) if piano_pitches else 0
+        return len(piano_pitches & orchestration_pitches) / len(piano_pitches) if len(piano_notes) > 0 else 0
 
     # Nested function for timing accuracy
     def evaluate_timing_accuracy(tolerance=0.1):
@@ -20,23 +18,42 @@ def evaluate_orchestration(piano_notes, orchestration_notes, instrument_ranges):
                 for o in orchestration_notes)
             for p in piano_notes
         )
-        return matches / len(piano_notes) if piano_notes else 0
+        return matches / len(piano_notes) if len(piano_notes) > 0 else 0
 
-    # Nested function for range appropriateness
+    # New nested function for range appropriateness.
+    # For each note, we:
+    #   1. Determine its layer (melody, harmony, or rhythm) based on its pitch.
+    #   2. Determine the current combo (using get_combo_for_beat on note['start']).
+    #   3. Get the candidate instruments (with their ranges) for that layer.
+    #   4. Check if the note's pitch falls within at least one candidate's range.
+    # Then, we compute the fraction of notes that are in range.
     def evaluate_range_appropriateness():
-        out_of_range = sum(
-            not (instrument_ranges.get(note["instrument"], (0, 127))[0] <= note["pitch"] <=
-                 instrument_ranges.get(note["instrument"], (0, 127))[1])
-            for note in orchestration_notes
-        )
-        return 1 - out_of_range / len(orchestration_notes) if orchestration_notes else 0
+        def get_layer(p):
+            if p > 60:
+                return "melody"
+            elif 50 <= p <= 60:
+                return "harmony"
+            else:
+                return "rhythm"
+        out_of_range = 0
+        total = 0
+        for note in orchestration_notes:
+            total += 1
+            layer = get_layer(note['pitch'])
+            combo_id = get_combo_for_beat(note['start'], combo1_duration, combo2_duration)
+            candidate_instruments = instrument_combos[combo_id][layer]
+            # Check if note's pitch falls within at least one candidate instrument's range.
+            in_range = any(min_pitch <= note['pitch'] <= max_pitch for (inst_name, min_pitch, max_pitch) in candidate_instruments)
+            if not in_range:
+                out_of_range += 1
+        return 1 - (out_of_range / total) if total > 0 else 0
 
-    # Call and return results from nested functions
     return {
         "Pitch Coverage": evaluate_pitch_coverage(),
         "Timing Accuracy": evaluate_timing_accuracy(),
         "Range Appropriateness": evaluate_range_appropriateness(),
     }
+
 
 def pitch_class_entropy(midi_path):
     midi = pretty_midi.PrettyMIDI(midi_path)

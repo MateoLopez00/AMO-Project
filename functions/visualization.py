@@ -1,11 +1,11 @@
+import numpy as np
 import matplotlib.pyplot as plt
 
 def plot_piano_roll(notes, title="Piano Roll (Beats)", ax=None):
-    # If no axis is provided, create a new one.
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Plot each note as a horizontal line from start to end at the note's pitch.
+    # Looping is fine here; each element is still accessed by field name.
     for note in notes:
         ax.plot([note['start'], note['end']], [note['pitch'], note['pitch']], color='blue')
     
@@ -13,21 +13,26 @@ def plot_piano_roll(notes, title="Piano Roll (Beats)", ax=None):
     ax.set_ylabel("Pitch")
     ax.set_title(title)
     ax.grid(True)
-    
     return ax
 
-# Plot polyphony over time
 def plot_polyphony(notes, title="Polyphony Over Time (Beats)", ax=None):
-    # Calculate the time points from note start and end times.
-    times = sorted(set(note['start'] for note in notes) | set(note['end'] for note in notes))
-    # Calculate polyphony at each time point.
-    polyphony = [sum(1 for note in notes if note['start'] <= t < note['end']) for t in times]
+    # Check if notes is a list of dicts
+    if isinstance(notes, list):
+        start_vals = np.array([note['start'] for note in notes])
+        end_vals = np.array([note['end'] for note in notes])
+    else:
+        # Assume notes is a structured array with 'start' and 'end' fields.
+        start_vals = notes['start']
+        end_vals = notes['end']
     
-    # If no axis is provided, create one.
+    # Use vectorized operations to get unique time points.
+    times = np.unique(np.concatenate((start_vals, end_vals)))
+    # For each time point, count how many notes are active.
+    polyphony = [np.sum((start_vals <= t) & (end_vals > t)) for t in times]
+    
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 5))
         
-    # Plot the polyphony curve.
     ax.plot(times, polyphony, label="Polyphony", color='green')
     ax.set_xlabel("Beats")
     ax.set_ylabel("Number of Notes")
