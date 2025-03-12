@@ -31,7 +31,8 @@ def array_to_midi(note_array, output_file, tempo_times=None, tempos=None):
     Converts a NumPy structured array (with fields: pitch, start, end, velocity, channel)
     back into a MIDI file and writes it to output_file.
     
-    Optionally, if tempo_times and tempos are provided, these tempo events are added.
+    Optionally, if tempo_times and tempos are provided, they are added to the MIDI.
+    
     Note: This function groups notes by their channel and assigns them to new PrettyMIDI
     Instrument objects using a default program (0). To exactly match the original,
     additional instrument/program information would need to be preserved.
@@ -43,7 +44,10 @@ def array_to_midi(note_array, output_file, tempo_times=None, tempos=None):
         ch = int(note['channel'])
         if ch not in instruments_dict:
             # Create an instrument with default program 0.
-            instr = pretty_midi.Instrument(program=0, is_drum=False, channel=ch)
+            # Remove the 'channel' keyword from the constructor.
+            instr = pretty_midi.Instrument(program=0, is_drum=False)
+            # Now assign the channel value.
+            instr.channel = ch
             instruments_dict[ch] = instr
         new_note = pretty_midi.Note(
             pitch=int(note['pitch']),
