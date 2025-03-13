@@ -30,18 +30,23 @@ def midi_to_array(midi_file):
     midi_obj = pretty_midi.PrettyMIDI(midi_file)
     # Extract channels using mido.
     channels_mapping = extract_channels(midi_file)
-    # Build a list of channels sorted by track index.
+    # Sort mapping by track index and build a list.
     sorted_indices = sorted(channels_mapping.keys())
     channels_list = [channels_mapping[i] for i in sorted_indices]
     
     note_list = []
     # Loop through each instrument in the PrettyMIDI object.
-    # We assume Music21 parts correspond to mido tracks starting at index 1.
     for i, instrument in enumerate(midi_obj.instruments):
-        # Use channel from channels_list[i+1] if available, else default to 0.
-        channel = channels_list[i+1] if (i+1) < len(channels_list) else 0
+        # Try to pick a nonzero channel if available.
+        if i < len(channels_list) and channels_list[i] != 0:
+            channel = channels_list[i]
+        elif i+1 < len(channels_list) and channels_list[i+1] != 0:
+            channel = channels_list[i+1]
+        else:
+            channel = 0
         for note in instrument.notes:
             note_list.append((note.pitch, note.start, note.end, note.velocity, channel))
+    
     note_dtype = np.dtype([
         ('pitch', np.int32),
         ('start', np.float64),
