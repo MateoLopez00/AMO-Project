@@ -25,21 +25,31 @@ def midi_to_numpy(midi_file):
     return np.array(note_events, dtype=np.int32)
 
 def numpy_to_midi(note_array, output_file):
-    """Convert a NumPy array back into a MIDI file."""
+    """Convert a NumPy array back into a MIDI file with correct delta times."""
     mid = mido.MidiFile()
     track = mido.MidiTrack()
     mid.tracks.append(track)
 
-    # Sort by start time
+    # Sort notes by start time to ensure proper timing
     note_array = note_array[note_array[:, 1].argsort()]
 
+    # Initialize time tracking
     last_time = 0
+    note_events = []
+
+    # Convert note-on and note-off events separately
     for note, start, end, velocity, channel in note_array:
-        delta_start = start - last_time
-        track.append(mido.Message('note_on', note=int(note), velocity=int(velocity), time=int(delta_start), channel=int(channel)))
-        delta_end = end - start
-        track.append(mido.Message('note_off', note=int(note), velocity=0, time=int(delta_end), channel=int(channel)))
-        last_time = end
+        note_events.append((start, 'note_on', note, velocity, channel))
+        note_events.append((end, 'note_off', note, 0, channel))
+
+    # Sort events by time to ensure correct order
+    note_events.sort()
+
+    # Write MIDI messages with correct delta times
+    for event_time, event_type, note, velocity, channel in note_events:
+        delta_time = event_time - last_time
+        last_time = event_time  # Update last event time
+        track.append(mido.Message(event_type, note=int(note), velocity=int(velocity), time=int(delta_time), channel=int(channel)))
 
     mid.save(output_file)
 
