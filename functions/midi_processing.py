@@ -4,67 +4,59 @@ import pretty_midi
 import mido
 
 def midi_to_nmat(midi_file):
-    # Load the MIDI file using pretty_midi
+    """Read a MIDI file and convert it to a notematrix.
+    Each row is: [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+    """
     pm = pretty_midi.PrettyMIDI(midi_file)
-    
-    # Estimate tempo (in BPM) and compute seconds per beat
-    tempo = pm.estimate_tempo()
-    spb = 60.0 / tempo  # seconds per beat
+    tempo = pm.estimate_tempo()  # BPM
+    spb = 60.0 / tempo          # seconds per beat
 
     nmat_list = []
     for instrument in pm.instruments:
-        # pretty_midi does not expose the MIDI channel directly.
-        # We use a simple placeholder: if the instrument is a drum, assign channel 10 (MIDI channel 10 is 9 in 0-indexing);
-        # otherwise, we use 1.
+        # Assign channel: 10 for drums, 1 otherwise.
         channel = 10 if instrument.is_drum else 1
         for note in instrument.notes:
             onset_sec = note.start
             duration_sec = note.end - note.start
             onset_beat = onset_sec / spb
             duration_beat = duration_sec / spb
-
-            # Append a row: [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+            # Append a row with the desired columns
             nmat_list.append([onset_beat, duration_beat, channel, note.pitch, note.velocity, onset_sec, duration_sec])
     
-    # Convert list to numpy array and sort by onset (if needed)
     nmat = np.array(nmat_list)
-    nmat = nmat[np.argsort(nmat[:, 0])]
+    # Sort by onset in beats then by pitch using lexsort:
+    sort_idx = np.lexsort((nmat[:,3], nmat[:,0]))
+    nmat = nmat[sort_idx]
     return nmat
 
 def nmat_to_midi(nmat, output_midi_file, default_program=0):
-    # Create a PrettyMIDI object
+    """Convert a notematrix to a MIDI file.
+    Assumes nmat columns: [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+    """
     pm = pretty_midi.PrettyMIDI()
     
-    # Group notes by channel. Column 3 (index 2) holds the channel information.
+    # Group notes by channel.
     channels = np.unique(nmat[:, 2])
     instruments = {}
-    
     for ch in channels:
-        # For channel 10, we assume drum (MIDI drum channel)
         is_drum = True if int(ch) == 10 else False
-        # Create an instrument; default_program is used for non-drum instruments.
         instrument = pretty_midi.Instrument(program=default_program, is_drum=is_drum)
         instruments[int(ch)] = instrument
     
-    # Iterate through each note event in the nmat
+    # Add notes to appropriate instrument.
     for row in nmat:
-        # Extract values: onset_sec (column 6), duration_sec (column 7)
         onset_sec = row[5]
         duration_sec = row[6]
         end_sec = onset_sec + duration_sec
         channel = int(row[2])
         pitch = int(row[3])
         velocity = int(row[4])
-        
-        # Create a note with the extracted values
         note = pretty_midi.Note(velocity=velocity, pitch=pitch, start=onset_sec, end=end_sec)
         instruments[channel].notes.append(note)
     
-    # Add each instrument to the PrettyMIDI object
-    for instrument in instruments.values():
-        pm.instruments.append(instrument)
+    for inst in instruments.values():
+        pm.instruments.append(inst)
     
-    # Write out the MIDI file
     pm.write(output_midi_file)
 
 def extract_channels(midi_file):
