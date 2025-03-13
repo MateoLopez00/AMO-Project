@@ -3,61 +3,96 @@ from music21 import converter, note, chord, meter
 import pretty_midi
 import mido
 
-def midi_to_nmat(midi_file):
-    """Read a MIDI file and convert it to a notematrix.
-    Each row is: [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+def midi_to_nmat_with_channels(midi_file):
     """
-    pm = pretty_midi.PrettyMIDI(midi_file)
-    tempo = pm.estimate_tempo()  # BPM
-    spb = 60.0 / tempo          # seconds per beat
+    Read a MIDI file using mido and convert it to a notematrix (nmat) with proper channel data.
+    Each row in nmat is:
+      [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+    """
+    mid = mido.MidiFile(midi_file)
+    ticks_per_beat = mid.ticks_per_beat
+    # Default tempo is 500000 microsec/beat (120 BPM)
+    tempo = 500000  
+    # Look for a tempo message in the first track, if available
+    for msg in mid.tracks[0]:
+        if msg.type == 'set_tempo':
+            tempo = msg.tempo
+            break
+    spb = tempo / 1e6  # seconds per beat
 
+    # Merge all tracks to get events in time order
+    merged = mido.merge_tracks(mid.tracks)
+    current_ticks = 0
     nmat_list = []
-    for instrument in pm.instruments:
-        # Assign channel: 10 for drums, 1 otherwise.
-        channel = 10 if instrument.is_drum else 1
-        for note in instrument.notes:
-            onset_sec = note.start
-            duration_sec = note.end - note.start
-            onset_beat = onset_sec / spb
-            duration_beat = duration_sec / spb
-            # Append a row with the desired columns
-            nmat_list.append([onset_beat, duration_beat, channel, note.pitch, note.velocity, onset_sec, duration_sec])
-    
+    # Dictionary to track note_on events: key = (channel, note)
+    ongoing_notes = {}
+    for msg in merged:
+        current_ticks += msg.time
+        current_sec = (current_ticks / ticks_per_beat) * spb
+        # Update tempo if there is a tempo change
+        if msg.type == 'set_tempo':
+            tempo = msg.tempo
+            spb = tempo / 1e6
+        if msg.type == 'note_on' and msg.velocity > 0:
+            key = (msg.channel, msg.note)
+            ongoing_notes[key] = (current_sec, msg.velocity)
+        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+            key = (msg.channel, msg.note)
+            if key in ongoing_notes:
+                start_sec, velocity = ongoing_notes[key]
+                duration_sec = current_sec - start_sec
+                onset_beat = start_sec / spb
+                duration_beat = duration_sec / spb
+                nmat_list.append([onset_beat, duration_beat, msg.channel, msg.note, velocity, start_sec, duration_sec])
+                del ongoing_notes[key]
     nmat = np.array(nmat_list)
-    # Sort by onset in beats then by pitch using lexsort:
-    sort_idx = np.lexsort((nmat[:,3], nmat[:,0]))
-    nmat = nmat[sort_idx]
-    return nmat
+    if nmat.size == 0:
+        return nmat
+    # Sort by onset (column 0) then by pitch (column 3)
+    sort_idx = np.lexsort((nmat[:, 3], nmat[:, 0]))
+    return nmat[sort_idx]
 
-def nmat_to_midi(nmat, output_midi_file, default_program=0):
-    """Convert a notematrix to a MIDI file.
-    Assumes nmat columns: [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+def nmat_to_midi(nmat, output_midi_file, ticks_per_beat=480, tempo=500000):
     """
-    pm = pretty_midi.PrettyMIDI()
-    
-    # Group notes by channel.
-    channels = np.unique(nmat[:, 2])
-    instruments = {}
-    for ch in channels:
-        is_drum = True if int(ch) == 10 else False
-        instrument = pretty_midi.Instrument(program=default_program, is_drum=is_drum)
-        instruments[int(ch)] = instrument
-    
-    # Add notes to appropriate instrument.
+    Convert a notematrix (nmat) to a MIDI file using mido.
+    It creates a single track containing all note events.
+    nmat columns: [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+    """
+    spb = tempo / 1e6  # seconds per beat
+    # Create a list of events: each note creates a note_on and note_off event.
+    events = []
     for row in nmat:
         onset_sec = row[5]
         duration_sec = row[6]
-        end_sec = onset_sec + duration_sec
+        note_off_sec = onset_sec + duration_sec
         channel = int(row[2])
-        pitch = int(row[3])
+        note = int(row[3])
         velocity = int(row[4])
-        note = pretty_midi.Note(velocity=velocity, pitch=pitch, start=onset_sec, end=end_sec)
-        instruments[channel].notes.append(note)
+        events.append((onset_sec, 'note_on', channel, note, velocity))
+        events.append((note_off_sec, 'note_off', channel, note, 0))
+    # Sort events by time; if times are equal, note_off events come before note_on events.
+    events.sort(key=lambda x: (x[0], 0 if x[1]=='note_off' else 1))
     
-    for inst in instruments.values():
-        pm.instruments.append(inst)
+    # Create a new MIDI file and track.
+    mid = mido.MidiFile(ticks_per_beat=ticks_per_beat)
+    track = mido.MidiTrack()
+    mid.tracks.append(track)
+    # Insert tempo information at the beginning.
+    track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=0))
     
-    pm.write(output_midi_file)
+    prev_time_sec = 0
+    for event in events:
+        current_time_sec = event[0]
+        delta_sec = current_time_sec - prev_time_sec
+        # Convert delta time from seconds to ticks.
+        delta_ticks = int(round(delta_sec / spb * ticks_per_beat))
+        if event[1] == 'note_on':
+            msg = mido.Message('note_on', channel=event[2], note=event[3], velocity=event[4], time=delta_ticks)
+        else:
+            msg = mido.Message('note_off', channel=event[2], note=event[3], velocity=0, time=delta_ticks)
+        track.append(msg)
+        prev_time_sec = current_time_sec
+    mid.save(output_midi_file)
 
 def extract_channels(midi_file):
     """
