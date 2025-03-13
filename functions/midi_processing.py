@@ -12,6 +12,7 @@ def midi_to_array(midi_file):
     midi_obj = pretty_midi.PrettyMIDI(midi_file)
     note_list = []
     for instrument in midi_obj.instruments:
+        # Use the instrument's channel if available; default to 0.
         ch = instrument.channel if hasattr(instrument, 'channel') else 0
         for note in instrument.notes:
             note_list.append((note.pitch, note.start, note.end, note.velocity, ch))
@@ -32,10 +33,6 @@ def array_to_midi(note_array, output_file, tempo_times=None, tempos=None):
     back into a MIDI file and writes it to output_file.
     
     Optionally, if tempo_times and tempos are provided, they are added to the MIDI.
-    
-    Note: This function groups notes by their channel and assigns them to new PrettyMIDI
-    Instrument objects using a default program (0). To exactly match the original,
-    additional instrument/program information would need to be preserved.
     """
     midi_obj = pretty_midi.PrettyMIDI()
     # Group notes by channel.
@@ -43,10 +40,7 @@ def array_to_midi(note_array, output_file, tempo_times=None, tempos=None):
     for note in note_array:
         ch = int(note['channel'])
         if ch not in instruments_dict:
-            # Create an instrument with default program 0.
-            # Remove the 'channel' keyword from the constructor.
             instr = pretty_midi.Instrument(program=0, is_drum=False)
-            # Now assign the channel value.
             instr.channel = ch
             instruments_dict[ch] = instr
         new_note = pretty_midi.Note(
@@ -85,13 +79,15 @@ def extract_midi_features(midi_file):
     score = converter.parse(midi_file)
     midi_data = pretty_midi.PrettyMIDI(midi_file)
     channels_mapping = extract_channels(midi_file)
+    # Convert the mapping to a list to preserve order.
+    channels_list = list(channels_mapping.values())
     
     note_list = []
     
     # Loop through each part in the Music21 score using enumerate.
     for i, part in enumerate(score.parts):
-        # Use the corresponding channel from mido's mapping; default to 0.
-        channel = channels_mapping.get(i, 0)
+        # Use the channel from channels_list by index; default to 0 if not available.
+        channel = channels_list[i] if i < len(channels_list) else 0
         
         for element in part.flat.notes:
             if isinstance(element, note.Note):
