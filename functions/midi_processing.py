@@ -3,85 +3,74 @@ from music21 import converter, note, chord, meter
 import pretty_midi
 import mido
 
-def midi_to_array(midi_file):
-    """
-    Reads a MIDI file using mido and extracts note features into a NumPy structured array.
-    The array will contain the columns: pitch, start, end, velocity, channel, track.
-    Start and end are computed in beats (quarter lengths), using the file's ticks_per_beat.
-    """
-    from mido import MidiFile
-    mid = MidiFile(midi_file)
-    ticks_per_beat = mid.ticks_per_beat
+def midi_to_numpy(midi_file):
+    """Convert a MIDI file to a NumPy array with columns: Pitch, Start, End, Velocity, Channel."""
+    mid = mido.MidiFile(midi_file)
     note_events = []
-    
-    # Process each track separately to preserve track info.
-    for track_index, track in enumerate(mid.tracks):
-        current_tick = 0
-        active_notes = {}  # key: (pitch, channel) -> list of start ticks
-        for msg in track:
-            current_tick += msg.time
-            if msg.type == 'note_on' and msg.velocity > 0:
-                key = (msg.note, msg.channel)
-                active_notes.setdefault(key, []).append(current_tick)
-            elif msg.type in ['note_off'] or (msg.type == 'note_on' and msg.velocity == 0):
-                key = (msg.note, msg.channel)
-                if key in active_notes and active_notes[key]:
-                    start_tick = active_notes[key].pop(0)
-                    start_beat = start_tick / ticks_per_beat
-                    end_beat = current_tick / ticks_per_beat
-                    note_events.append((msg.note, start_beat, end_beat, msg.velocity, msg.channel, track_index))
-        # If some active notes remain, we ignore them.
-    # Sort events by start then by pitch.
-    note_events.sort(key=lambda x: (x[1], x[0]))
-    dtype = np.dtype([
-        ('pitch', np.int32),
-        ('start', np.float64),
-        ('end', np.float64),
-        ('velocity', np.int32),
-        ('channel', np.int32),
-        ('track', np.int32)
-    ])
-    return np.array(note_events, dtype=dtype)
 
-def array_to_midi(note_array, output_file, ticks_per_beat=480, tempo=500000):
-    """
-    Converts a note array (with fields: pitch, start, end, velocity, channel, track)
-    back into a MIDI file and writes it to output_file.
-    Beats (quarter lengths) are converted back to ticks using ticks_per_beat.
-    A default tempo meta message is added to track 0.
-    """
-    from mido import Message, MidiFile, MidiTrack, MetaMessage
-    mid = MidiFile(ticks_per_beat=ticks_per_beat)
-    # Group note events by track.
-    tracks_dict = {}
-    for note in note_array:
-        track_idx = int(note['track'])
-        tracks_dict.setdefault(track_idx, []).append(note)
-    
-    # For each original track, create a MidiTrack and add events.
-    for track_idx, notes in tracks_dict.items():
-        track = MidiTrack()
-        mid.tracks.append(track)
-        # Convert beat times to ticks.
-        events = []
-        for note in notes:
-            start_tick = int(round(note['start'] * ticks_per_beat))
-            end_tick = int(round(note['end'] * ticks_per_beat))
-            events.append((start_tick, 'note_on', int(note['pitch']), int(note['velocity']), int(note['channel'])))
-            events.append((end_tick, 'note_off', int(note['pitch']), int(note['velocity']), int(note['channel'])))
-        # Sort events by absolute tick time.
-        events.sort(key=lambda x: x[0])
-        prev_tick = 0
-        for evt in events:
-            tick, etype, pitch, velocity, channel = evt
-            delta = tick - prev_tick
-            prev_tick = tick
-            msg = Message(etype, note=pitch, velocity=velocity, channel=channel, time=delta)
-            track.append(msg)
-    # Insert a tempo meta message at the beginning of track 0.
-    if mid.tracks:
-        mid.tracks[0].insert(0, MetaMessage('set_tempo', tempo=tempo, time=0))
+    for i, track in enumerate(mid.tracks):
+        current_time = 0
+        active_notes = {}  # Track active notes
+
+        for msg in track:
+            current_time += msg.time  # Accumulate delta time
+
+            if msg.type == 'note_on' and msg.velocity > 0:
+                active_notes[(msg.note, msg.channel)] = (current_time, msg.velocity)
+
+            elif (msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0)) and (msg.note, msg.channel) in active_notes:
+                start_time, velocity = active_notes.pop((msg.note, msg.channel))
+                note_events.append([msg.note, start_time, current_time, velocity, msg.channel])
+
+    return np.array(note_events, dtype=np.int32)
+
+def numpy_to_midi(note_array, output_file):
+    """Convert a NumPy array back into a MIDI file."""
+    mid = mido.MidiFile()
+    track = mido.MidiTrack()
+    mid.tracks.append(track)
+
+    # Sort by start time
+    note_array = note_array[note_array[:, 1].argsort()]
+
+    last_time = 0
+    for note, start, end, velocity, channel in note_array:
+        delta_start = start - last_time
+        track.append(mido.Message('note_on', note=int(note), velocity=int(velocity), time=int(delta_start), channel=int(channel)))
+        delta_end = end - start
+        track.append(mido.Message('note_off', note=int(note), velocity=0, time=int(delta_end), channel=int(channel)))
+        last_time = end
+
     mid.save(output_file)
+
+def compare_arrays_to_excel(input_array, output_array, excel_file):
+    """Save input and output NumPy arrays side by side in an Excel file for comparison."""
+    df_input = pd.DataFrame(input_array, columns=["Pitch", "Start", "End", "Velocity", "Channel"])
+    df_output = pd.DataFrame(output_array, columns=["Pitch", "Start", "End", "Velocity", "Channel"])
+
+    with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+        df_input.to_excel(writer, sheet_name="Comparison", startcol=0, index=False)
+        df_output.to_excel(writer, sheet_name="Comparison", startcol=df_input.shape[1] + 2, index=False)
+
+    print(f"Round-trip comparison saved as '{excel_file}'")
+
+def extract_channels(midi_file):
+    """
+    Extract a mapping from track index to MIDI channel using mido.
+    Returns a dictionary mapping track indices to a channel.
+    For each track, we take the first note_on/note_off message's channel,
+    defaulting to 0 if none is found.
+    """
+    midi_mido = mido.MidiFile(midi_file)
+    channels_mapping = {}
+    for i, track in enumerate(midi_mido.tracks):
+        channel = None
+        for msg in track:
+            if msg.type in ['note_on', 'note_off'] and hasattr(msg, 'channel'):
+                channel = msg.channel
+                break
+        channels_mapping[i] = channel if channel is not None else 0
+    return channels_mapping
 
 def extract_midi_features(midi_file):
     score = converter.parse(midi_file)
