@@ -1,54 +1,35 @@
-import pandas as pd
 import numpy as np
 from music21 import converter, note, chord, meter
 import pretty_midi
-import miditoolkit
+import mido
 
-def midi_to_numpy_miditoolkit(midi_file):
-    """Convert a MIDI file to a NumPy array using miditoolkit."""
-    midi_obj = miditoolkit.midi.parser.MidiFile(midi_file)
-    note_events = []
+def midi_to_nmat(midi_file):
+    # Load the MIDI file using pretty_midi
+    pm = pretty_midi.PrettyMIDI(midi_file)
+    
+    # Estimate tempo (in BPM) and compute seconds per beat
+    tempo = pm.estimate_tempo()
+    spb = 60.0 / tempo  # seconds per beat
 
-    for instrument in midi_obj.instruments:
+    nmat_list = []
+    for instrument in pm.instruments:
+        # pretty_midi does not expose the MIDI channel directly.
+        # We use a simple placeholder: if the instrument is a drum, assign channel 10 (MIDI channel 10 is 9 in 0-indexing);
+        # otherwise, we use 1.
+        channel = 10 if instrument.is_drum else 1
         for note in instrument.notes:
-            note_events.append([
-                note.pitch,
-                note.start,
-                note.end,
-                note.velocity,
-                instrument.program
-            ])
+            onset_sec = note.start
+            duration_sec = note.end - note.start
+            onset_beat = onset_sec / spb
+            duration_beat = duration_sec / spb
 
-    return np.array(note_events, dtype=np.int32)
-
-def numpy_to_midi_miditoolkit(note_array, output_file):
-    """Convert a NumPy array back into a MIDI file using miditoolkit."""
-    midi_obj = miditoolkit.midi.parser.MidiFile()
-    instrument = miditoolkit.Instrument(program=0)
-
-    for note, start, end, velocity, program in note_array:
-        midi_note = miditoolkit.Note(
-            velocity=int(velocity),
-            pitch=int(note),
-            start=int(start),
-            end=int(end)
-        )
-        instrument.notes.append(midi_note)
-
-    midi_obj.instruments.append(instrument)
-    midi_obj.dump(output_file)
-
-def compare_arrays_to_excel_miditoolkit(input_array, output_array, excel_file):
-    """Save input and output NumPy arrays side by side in an Excel file for comparison."""
-    df_input = pd.DataFrame(input_array, columns=["Pitch", "Start", "End", "Velocity", "Program"])
-    df_output = pd.DataFrame(output_array, columns=["Pitch", "Start", "End", "Velocity", "Program"])
-
-    with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
-        df_input.to_excel(writer, sheet_name="Comparison", startcol=0, index=False)
-        df_output.to_excel(writer, sheet_name="Comparison", startcol=df_input.shape[1] + 2, index=False)
-
-    print(f"Round-trip comparison saved as '{excel_file}'")
-
+            # Append a row: [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+            nmat_list.append([onset_beat, duration_beat, channel, note.pitch, note.velocity, onset_sec, duration_sec])
+    
+    # Convert list to numpy array and sort by onset (if needed)
+    nmat = np.array(nmat_list)
+    nmat = nmat[np.argsort(nmat[:, 0])]
+    return nmat
 
 def extract_channels(midi_file):
     """
