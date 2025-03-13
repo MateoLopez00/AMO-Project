@@ -66,12 +66,6 @@ def nmat_to_midi(nmat, output_midi_file, default_program=0):
     
     # Write out the MIDI file
     pm.write(output_midi_file)
-    
-# Example usage:
-# Assuming you already have nmat loaded as a NumPy array (e.g., from previous processing)
-output_filename = "converted_from_nmat.mid"
-nmat_to_midi(nmat, output_filename)
-print(f"MIDI file saved as {output_filename}")
 
 def extract_channels(midi_file):
     """
