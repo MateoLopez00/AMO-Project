@@ -3,6 +3,24 @@ from music21 import converter, note, chord, meter
 import pretty_midi
 import mido
 
+def extract_channels(midi_file):
+    """
+    Extract a mapping from track index to MIDI channel using mido.
+    Returns a dictionary mapping track indices to a channel.
+    For each track, we take the first note_on/note_off message's channel,
+    defaulting to 0 if none is found.
+    """
+    midi_mido = mido.MidiFile(midi_file)
+    channels_mapping = {}
+    for i, track in enumerate(midi_mido.tracks):
+        channel = None
+        for msg in track:
+            if msg.type in ['note_on', 'note_off'] and hasattr(msg, 'channel'):
+                channel = msg.channel
+                break
+        channels_mapping[i] = channel if channel is not None else 0
+    return channels_mapping
+
 def midi_to_array(midi_file):
     """
     Reads a MIDI file and extracts note features into a NumPy structured array.
@@ -10,12 +28,19 @@ def midi_to_array(midi_file):
     Note times are kept as raw quarter-length values (beats).
     """
     midi_obj = pretty_midi.PrettyMIDI(midi_file)
+    # Extract channels using mido.
+    channels_mapping = extract_channels(midi_file)
+    # Convert mapping to a list so that the order is preserved.
+    channels_list = list(channels_mapping.values())
+    
     note_list = []
-    for instrument in midi_obj.instruments:
-        # Use the instrument's channel if available; default to 0.
-        ch = instrument.channel if hasattr(instrument, 'channel') else 0
+    # Iterate over instruments in the PrettyMIDI object using their index.
+    for i, instrument in enumerate(midi_obj.instruments):
+        # Use the channel from the channels_list (if available) by index.
+        ch = channels_list[i] if i < len(channels_list) else 0
         for note in instrument.notes:
             note_list.append((note.pitch, note.start, note.end, note.velocity, ch))
+    
     note_dtype = np.dtype([
         ('pitch', np.int32),
         ('start', np.float64),
@@ -57,37 +82,17 @@ def array_to_midi(note_array, output_file, tempo_times=None, tempos=None):
         midi_obj._PrettyMIDI__tempo_changes = (np.array(tempo_times), np.array(tempos))
     midi_obj.write(output_file)
 
-def extract_channels(midi_file):
-    """
-    Extract a mapping from track index to MIDI channel using mido.
-    Returns a dictionary mapping track indices to a channel.
-    For each track, we take the first note_on/note_off message's channel,
-    defaulting to 0 if none is found.
-    """
-    midi_mido = mido.MidiFile(midi_file)
-    channels_mapping = {}
-    for i, track in enumerate(midi_mido.tracks):
-        channel = None
-        for msg in track:
-            if msg.type in ['note_on', 'note_off'] and hasattr(msg, 'channel'):
-                channel = msg.channel
-                break
-        channels_mapping[i] = channel if channel is not None else 0
-    return channels_mapping
-
 def extract_midi_features(midi_file):
     score = converter.parse(midi_file)
     midi_data = pretty_midi.PrettyMIDI(midi_file)
     channels_mapping = extract_channels(midi_file)
-    # Convert the mapping to a list to preserve order.
-    channels_list = list(channels_mapping.values())
     
     note_list = []
     
     # Loop through each part in the Music21 score using enumerate.
     for i, part in enumerate(score.parts):
-        # Use the channel from channels_list by index; default to 0 if not available.
-        channel = channels_list[i] if i < len(channels_list) else 0
+        # Use the corresponding channel from mido's mapping; default to 0.
+        channel = channels_mapping.get(i, 0)
         
         for element in part.flat.notes:
             if isinstance(element, note.Note):
