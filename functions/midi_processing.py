@@ -2,68 +2,53 @@ import pandas as pd
 import numpy as np
 from music21 import converter, note, chord, meter
 import pretty_midi
-import mido
+import miditoolkit
 
-def midi_to_numpy(midi_file):
-    """Convert a MIDI file to a NumPy array with columns: Pitch, Start, End, Velocity, Channel."""
-    mid = mido.MidiFile(midi_file)
+def midi_to_numpy_miditoolkit(midi_file):
+    """Convert a MIDI file to a NumPy array using miditoolkit."""
+    midi_obj = miditoolkit.midi.parser.MidiFile(midi_file)
     note_events = []
 
-    for i, track in enumerate(mid.tracks):
-        current_time = 0
-        active_notes = {}  # Track active notes
-
-        for msg in track:
-            current_time += msg.time  # Accumulate delta time
-
-            if msg.type == 'note_on' and msg.velocity > 0:
-                active_notes[(msg.note, msg.channel)] = (current_time, msg.velocity)
-
-            elif (msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0)) and (msg.note, msg.channel) in active_notes:
-                start_time, velocity = active_notes.pop((msg.note, msg.channel))
-                note_events.append([msg.note, start_time, current_time, velocity, msg.channel])
+    for instrument in midi_obj.instruments:
+        for note in instrument.notes:
+            note_events.append([
+                note.pitch,
+                note.start,
+                note.end,
+                note.velocity,
+                instrument.program
+            ])
 
     return np.array(note_events, dtype=np.int32)
 
-def numpy_to_midi(note_array, output_file):
-    """Convert a NumPy array back into a MIDI file with correct delta times."""
-    mid = mido.MidiFile()
-    track = mido.MidiTrack()
-    mid.tracks.append(track)
+def numpy_to_midi_miditoolkit(note_array, output_file):
+    """Convert a NumPy array back into a MIDI file using miditoolkit."""
+    midi_obj = miditoolkit.midi.parser.MidiFile()
+    instrument = miditoolkit.Instrument(program=0)
 
-    # Sort notes by start time to ensure proper timing
-    note_array = note_array[note_array[:, 1].argsort()]
+    for note, start, end, velocity, program in note_array:
+        midi_note = miditoolkit.Note(
+            velocity=int(velocity),
+            pitch=int(note),
+            start=int(start),
+            end=int(end)
+        )
+        instrument.notes.append(midi_note)
 
-    # Initialize time tracking
-    last_time = 0
-    note_events = []
+    midi_obj.instruments.append(instrument)
+    midi_obj.dump(output_file)
 
-    # Convert note-on and note-off events separately
-    for note, start, end, velocity, channel in note_array:
-        note_events.append((start, 'note_on', note, velocity, channel))
-        note_events.append((end, 'note_off', note, 0, channel))
-
-    # Sort events by time to ensure correct order
-    note_events.sort()
-
-    # Write MIDI messages with correct delta times
-    for event_time, event_type, note, velocity, channel in note_events:
-        delta_time = event_time - last_time
-        last_time = event_time  # Update last event time
-        track.append(mido.Message(event_type, note=int(note), velocity=int(velocity), time=int(delta_time), channel=int(channel)))
-
-    mid.save(output_file)
-
-def compare_arrays_to_excel(input_array, output_array, excel_file):
+def compare_arrays_to_excel_miditoolkit(input_array, output_array, excel_file):
     """Save input and output NumPy arrays side by side in an Excel file for comparison."""
-    df_input = pd.DataFrame(input_array, columns=["Pitch", "Start", "End", "Velocity", "Channel"])
-    df_output = pd.DataFrame(output_array, columns=["Pitch", "Start", "End", "Velocity", "Channel"])
+    df_input = pd.DataFrame(input_array, columns=["Pitch", "Start", "End", "Velocity", "Program"])
+    df_output = pd.DataFrame(output_array, columns=["Pitch", "Start", "End", "Velocity", "Program"])
 
     with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
         df_input.to_excel(writer, sheet_name="Comparison", startcol=0, index=False)
         df_output.to_excel(writer, sheet_name="Comparison", startcol=df_input.shape[1] + 2, index=False)
 
     print(f"Round-trip comparison saved as '{excel_file}'")
+
 
 def extract_channels(midi_file):
     """
