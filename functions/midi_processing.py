@@ -3,95 +3,85 @@ from music21 import converter, note, chord, meter
 import pretty_midi
 import mido
 
-def extract_channels(midi_file):
-    """
-    Extract a mapping from track index to a list of MIDI channels using mido.
-    For each track, we examine all note_on/note_off messages and store all unique channels.
-    If no channel is found, we default to [0].
-    """
-    midi_mido = mido.MidiFile(midi_file)
-    channels_mapping = {}
-    for i, track in enumerate(midi_mido.tracks):
-        channels = set()
-        for msg in track:
-            if msg.type in ['note_on', 'note_off'] and hasattr(msg, 'channel'):
-                channels.add(msg.channel)
-        # If no channels were found for this track, default to [0]
-        channels_mapping[i] = list(channels) if channels else [0]
-    return channels_mapping
-
 def midi_to_array(midi_file):
     """
-    Reads a MIDI file and extracts note features into a NumPy structured array.
-    The array will contain the columns: pitch, start, end, velocity, channel.
-    Note times are kept as raw quarter-length values (beats).
-    The channel field is stored as an object (list of channels) to preserve all channel info.
+    Reads a MIDI file using mido and extracts note features into a NumPy structured array.
+    The array will contain the columns: pitch, start, end, velocity, channel, track.
+    Start and end are computed in beats (quarter lengths), using the file's ticks_per_beat.
     """
-    midi_obj = pretty_midi.PrettyMIDI(midi_file)
-    # Extract channels using mido.
-    channels_mapping = extract_channels(midi_file)
-    # Build a list of channels sorted by track index.
-    sorted_indices = sorted(channels_mapping.keys())
-    channels_list = [channels_mapping[i] for i in sorted_indices]
+    from mido import MidiFile
+    mid = MidiFile(midi_file)
+    ticks_per_beat = mid.ticks_per_beat
+    note_events = []
     
-    note_list = []
-    # Loop through each instrument in the PrettyMIDI object.
-    # Note: The ordering of instruments may not perfectly match the mido track order.
-    for i, instrument in enumerate(midi_obj.instruments):
-        # Attempt to assign channel info:
-        # First, try using channels_list[i+1] if available and non-empty, else channels_list[i], else default to [0].
-        if (i+1) < len(channels_list) and len(channels_list[i+1]) > 0:
-            channel = channels_list[i+1]
-        elif i < len(channels_list) and len(channels_list[i]) > 0:
-            channel = channels_list[i]
-        else:
-            channel = [0]
-        for n in instrument.notes:
-            note_list.append((n.pitch, n.start, n.end, n.velocity, channel))
-    
-    note_dtype = np.dtype([
+    # Process each track separately to preserve track info.
+    for track_index, track in enumerate(mid.tracks):
+        current_tick = 0
+        active_notes = {}  # key: (pitch, channel) -> list of start ticks
+        for msg in track:
+            current_tick += msg.time
+            if msg.type == 'note_on' and msg.velocity > 0:
+                key = (msg.note, msg.channel)
+                active_notes.setdefault(key, []).append(current_tick)
+            elif msg.type in ['note_off'] or (msg.type == 'note_on' and msg.velocity == 0):
+                key = (msg.note, msg.channel)
+                if key in active_notes and active_notes[key]:
+                    start_tick = active_notes[key].pop(0)
+                    start_beat = start_tick / ticks_per_beat
+                    end_beat = current_tick / ticks_per_beat
+                    note_events.append((msg.note, start_beat, end_beat, msg.velocity, msg.channel, track_index))
+        # If some active notes remain, we ignore them.
+    # Sort events by start then by pitch.
+    note_events.sort(key=lambda x: (x[1], x[0]))
+    dtype = np.dtype([
         ('pitch', np.int32),
         ('start', np.float64),
         ('end', np.float64),
         ('velocity', np.int32),
-        ('channel', object)  # store channel as object to allow a list
+        ('channel', np.int32),
+        ('track', np.int32)
     ])
-    note_array = np.array(note_list, dtype=note_dtype)
-    note_array = np.sort(note_array, order=['start', 'pitch'])
-    return note_array
+    return np.array(note_events, dtype=dtype)
 
-def array_to_midi(note_array, output_file, tempo_times=None, tempos=None):
+def array_to_midi(note_array, output_file, ticks_per_beat=480, tempo=500000):
     """
-    Converts a NumPy structured array (with fields: pitch, start, end, velocity, channel)
+    Converts a note array (with fields: pitch, start, end, velocity, channel, track)
     back into a MIDI file and writes it to output_file.
-    
-    Optionally, if tempo_times and tempos are provided, they are added to the MIDI.
-    
-    Note: Since a MIDI note can only belong to one channel, if the channel field is a list,
-    the function uses the first channel from the list.
+    Beats (quarter lengths) are converted back to ticks using ticks_per_beat.
+    A default tempo meta message is added to track 0.
     """
-    midi_obj = pretty_midi.PrettyMIDI()
-    instruments_dict = {}
+    from mido import Message, MidiFile, MidiTrack, MetaMessage
+    mid = MidiFile(ticks_per_beat=ticks_per_beat)
+    # Group note events by track.
+    tracks_dict = {}
     for note in note_array:
-        # If the channel field is a list, take the first element.
-        ch = note['channel'][0] if isinstance(note['channel'], list) and len(note['channel']) > 0 else 0
-        if ch not in instruments_dict:
-            instr = pretty_midi.Instrument(program=0, is_drum=False)
-            instr.channel = ch
-            instruments_dict[ch] = instr
-        new_note = pretty_midi.Note(
-            pitch=int(note['pitch']),
-            start=float(note['start']),
-            end=float(note['end']),
-            velocity=int(note['velocity'])
-        )
-        instruments_dict[ch].notes.append(new_note)
-    for instr in instruments_dict.values():
-        instr.notes.sort(key=lambda n: n.start)
-        midi_obj.instruments.append(instr)
-    if tempo_times is not None and tempos is not None:
-        midi_obj._PrettyMIDI__tempo_changes = (np.array(tempo_times), np.array(tempos))
-    midi_obj.write(output_file)
+        track_idx = int(note['track'])
+        tracks_dict.setdefault(track_idx, []).append(note)
+    
+    # For each original track, create a MidiTrack and add events.
+    for track_idx, notes in tracks_dict.items():
+        track = MidiTrack()
+        mid.tracks.append(track)
+        # Convert beat times to ticks.
+        events = []
+        for note in notes:
+            start_tick = int(round(note['start'] * ticks_per_beat))
+            end_tick = int(round(note['end'] * ticks_per_beat))
+            events.append((start_tick, 'note_on', int(note['pitch']), int(note['velocity']), int(note['channel'])))
+            events.append((end_tick, 'note_off', int(note['pitch']), int(note['velocity']), int(note['channel'])))
+        # Sort events by absolute tick time.
+        events.sort(key=lambda x: x[0])
+        prev_tick = 0
+        for evt in events:
+            tick, etype, pitch, velocity, channel = evt
+            delta = tick - prev_tick
+            prev_tick = tick
+            msg = Message(etype, note=pitch, velocity=velocity, channel=channel, time=delta)
+            track.append(msg)
+    # Insert a tempo meta message at the beginning of track 0.
+    if mid.tracks:
+        mid.tracks[0].insert(0, MetaMessage('set_tempo', tempo=tempo, time=0))
+    mid.save(output_file)
 
 def extract_midi_features(midi_file):
     score = converter.parse(midi_file)
