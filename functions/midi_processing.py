@@ -31,6 +31,48 @@ def midi_to_nmat(midi_file):
     nmat = nmat[np.argsort(nmat[:, 0])]
     return nmat
 
+def nmat_to_midi(nmat, output_midi_file, default_program=0):
+    # Create a PrettyMIDI object
+    pm = pretty_midi.PrettyMIDI()
+    
+    # Group notes by channel. Column 3 (index 2) holds the channel information.
+    channels = np.unique(nmat[:, 2])
+    instruments = {}
+    
+    for ch in channels:
+        # For channel 10, we assume drum (MIDI drum channel)
+        is_drum = True if int(ch) == 10 else False
+        # Create an instrument; default_program is used for non-drum instruments.
+        instrument = pretty_midi.Instrument(program=default_program, is_drum=is_drum)
+        instruments[int(ch)] = instrument
+    
+    # Iterate through each note event in the nmat
+    for row in nmat:
+        # Extract values: onset_sec (column 6), duration_sec (column 7)
+        onset_sec = row[5]
+        duration_sec = row[6]
+        end_sec = onset_sec + duration_sec
+        channel = int(row[2])
+        pitch = int(row[3])
+        velocity = int(row[4])
+        
+        # Create a note with the extracted values
+        note = pretty_midi.Note(velocity=velocity, pitch=pitch, start=onset_sec, end=end_sec)
+        instruments[channel].notes.append(note)
+    
+    # Add each instrument to the PrettyMIDI object
+    for instrument in instruments.values():
+        pm.instruments.append(instrument)
+    
+    # Write out the MIDI file
+    pm.write(output_midi_file)
+    
+# Example usage:
+# Assuming you already have nmat loaded as a NumPy array (e.g., from previous processing)
+output_filename = "converted_from_nmat.mid"
+nmat_to_midi(nmat, output_filename)
+print(f"MIDI file saved as {output_filename}")
+
 def extract_channels(midi_file):
     """
     Extract a mapping from track index to MIDI channel using mido.
