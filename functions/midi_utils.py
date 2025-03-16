@@ -4,14 +4,14 @@ import numpy as np
 
 def midi_to_nmat_without_merge(midi_file):
     """
-    Reads a MIDI file without merging tracks. It processes each track separately,
-    accumulates note_on and note_off events, and returns a notematrix (nmat)
+    Reads a MIDI file without merging tracks.
+    Processes each track separately to extract note_on/note_off events and returns a notematrix (nmat)
     with rows:
       [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
     """
     mid = mido.MidiFile(midi_file)
     ticks_per_beat = mid.ticks_per_beat
-    # Get tempo from first track or use default 500000 (120 BPM)
+    # Use default tempo (500000 microseconds/beat = 120 BPM) or find one in the first track
     tempo = 500000
     for msg in mid.tracks[0]:
         if msg.type == 'set_tempo':
@@ -20,7 +20,7 @@ def midi_to_nmat_without_merge(midi_file):
     spb = tempo / 1e6  # seconds per beat
 
     nmat_list = []
-    # Process each track separately
+    # Process each track individually
     for track in mid.tracks:
         current_ticks = 0
         ongoing_notes = {}  # key=(channel, note)
@@ -44,7 +44,7 @@ def midi_to_nmat_without_merge(midi_file):
         sort_idx = np.lexsort((nmat[:, 3], nmat[:, 0]))
         nmat = nmat[sort_idx]
     else:
-        nmat = np.zeros((0,7))
+        nmat = np.zeros((0, 7))
     return nmat
 
 def midi_to_nmat_with_channels(midi_file):
