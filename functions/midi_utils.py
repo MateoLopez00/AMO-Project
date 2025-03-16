@@ -4,33 +4,42 @@ import numpy as np
 
 def midi_to_nmat_without_merge(midi_file):
     """
-    Reads a MIDI file without merging tracks.
-    Processes each track separately to extract note_on/note_off events and returns a notematrix (nmat)
-    with rows:
+    Reads a MIDI file by processing each track separately.
+    Returns a notematrix (nmat) where each row is:
       [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
     """
     mid = mido.MidiFile(midi_file)
     ticks_per_beat = mid.ticks_per_beat
-    # Use default tempo (500000 microseconds/beat = 120 BPM) or find one in the first track
+    
+    # Find the first tempo message (or use default 500000 microseconds/beat = 120 BPM)
     tempo = 500000
-    for msg in mid.tracks[0]:
-        if msg.type == 'set_tempo':
-            tempo = msg.tempo
+    for track in mid.tracks:
+        for msg in track:
+            if msg.type == 'set_tempo':
+                tempo = msg.tempo
+                break
+        if tempo != 500000:
             break
+
     spb = tempo / 1e6  # seconds per beat
 
     nmat_list = []
-    # Process each track individually
-    for track in mid.tracks:
+    
+    # Process each track independently.
+    for t_idx, track in enumerate(mid.tracks):
         current_ticks = 0
-        ongoing_notes = {}  # key=(channel, note)
+        ongoing_notes = {}  # Dictionary to track active notes: key=(channel, note)
         for msg in track:
+            # Accumulate the delta time.
             current_ticks += msg.time
             current_sec = (current_ticks / ticks_per_beat) * spb
+            
+            # If this is a note_on with nonzero velocity, mark the note's start.
             if msg.type == 'note_on' and msg.velocity > 0:
                 key = (msg.channel, msg.note)
                 ongoing_notes[key] = (current_sec, msg.velocity)
-            elif msg.type in ('note_off', 'note_on') and msg.velocity == 0:
+            # Note_off events or note_on with velocity==0 mark the note's end.
+            elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
                 key = (msg.channel, msg.note)
                 if key in ongoing_notes:
                     start_sec, velocity = ongoing_notes[key]
@@ -39,12 +48,14 @@ def midi_to_nmat_without_merge(midi_file):
                     duration_beats = duration_sec / spb
                     nmat_list.append([onset_beats, duration_beats, msg.channel, msg.note, velocity, start_sec, duration_sec])
                     del ongoing_notes[key]
+    
     if nmat_list:
         nmat = np.array(nmat_list)
         sort_idx = np.lexsort((nmat[:, 3], nmat[:, 0]))
         nmat = nmat[sort_idx]
     else:
         nmat = np.zeros((0, 7))
+    
     return nmat
 
 def midi_to_nmat_with_channels(midi_file):
