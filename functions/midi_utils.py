@@ -2,6 +2,51 @@
 import mido
 import numpy as np
 
+def midi_to_nmat_without_merge(midi_file):
+    """
+    Reads a MIDI file without merging tracks. It processes each track separately,
+    accumulates note_on and note_off events, and returns a notematrix (nmat)
+    with rows:
+      [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+    """
+    mid = mido.MidiFile(midi_file)
+    ticks_per_beat = mid.ticks_per_beat
+    # Get tempo from first track or use default 500000 (120 BPM)
+    tempo = 500000
+    for msg in mid.tracks[0]:
+        if msg.type == 'set_tempo':
+            tempo = msg.tempo
+            break
+    spb = tempo / 1e6  # seconds per beat
+
+    nmat_list = []
+    # Process each track separately
+    for track in mid.tracks:
+        current_ticks = 0
+        ongoing_notes = {}  # key=(channel, note)
+        for msg in track:
+            current_ticks += msg.time
+            current_sec = (current_ticks / ticks_per_beat) * spb
+            if msg.type == 'note_on' and msg.velocity > 0:
+                key = (msg.channel, msg.note)
+                ongoing_notes[key] = (current_sec, msg.velocity)
+            elif msg.type in ('note_off', 'note_on') and msg.velocity == 0:
+                key = (msg.channel, msg.note)
+                if key in ongoing_notes:
+                    start_sec, velocity = ongoing_notes[key]
+                    duration_sec = current_sec - start_sec
+                    onset_beats = start_sec / spb
+                    duration_beats = duration_sec / spb
+                    nmat_list.append([onset_beats, duration_beats, msg.channel, msg.note, velocity, start_sec, duration_sec])
+                    del ongoing_notes[key]
+    if nmat_list:
+        nmat = np.array(nmat_list)
+        sort_idx = np.lexsort((nmat[:, 3], nmat[:, 0]))
+        nmat = nmat[sort_idx]
+    else:
+        nmat = np.zeros((0,7))
+    return nmat
+
 def midi_to_nmat_with_channels(midi_file):
     """
     Reads a MIDI file using mido and returns a notematrix (nmat) where each row is:
