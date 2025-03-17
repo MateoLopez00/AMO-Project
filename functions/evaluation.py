@@ -1,7 +1,6 @@
 from collections import Counter
 import pretty_midi
 import numpy as np
-from orchestration import get_combo_for_beat, instrument_combos
 
 def evaluate_orchestration(piano_notes, orchestration_notes, combo1_duration=16, combo2_duration=8):
     # Pitch Coverage: What fraction of unique piano pitches appear in the orchestration?
