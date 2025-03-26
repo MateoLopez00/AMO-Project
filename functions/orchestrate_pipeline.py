@@ -7,43 +7,31 @@ from visualization import nmat_to_note_list_vis, plot_piano_roll, plot_polyphony
 
 def orchestrate_pipeline(input_midi, output_midi, comparison_xlsx="comparison.xlsx"):
     # 1. Read the full MIDI and build its note matrix (nmat_in)
-    # Now nmat_in has 9 columns:
-    # [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec, onset_quarters, duration_quarters]
     midi_data, nmat_in = read_midi_full(input_midi)
     
-    # 2. Convert the note matrix into a DataFrame with all 9 columns
-    df_full = pd.DataFrame(nmat_in, columns=[
-        "onset_beats", "duration_beats", "channel", "pitch", "velocity",
-        "onset_sec", "duration_sec", "onset_quarters", "duration_quarters"
+    # 2. Convert the note matrix into a DataFrame
+    df = pd.DataFrame(nmat_in, columns=[
+        "onset_beats", "duration_beats", "channel", "pitch", "velocity", "onset_sec", "duration_sec"
     ])
     
-    # 3. Save the quarter note columns separately (they will not be processed by orchestration logic)
-    quarter_cols = df_full[["onset_quarters", "duration_quarters"]].copy()
-    
-    # 4. Pass only the first 7 columns to the orchestration logic
-    df = df_full.iloc[:, :7].copy()
+    # 3. Apply orchestration logic to assign new channels, GM patch numbers, and instrument names
     df_orch = apply_orchestration(df)
     
-    # 5. Re-attach the quarter note columns to the orchestrated DataFrame
-    df_orch = pd.concat([df_orch.reset_index(drop=True), quarter_cols.reset_index(drop=True)], axis=1)
-    
-    # 6. Convert the orchestrated DataFrame back to a notematrix (now with 9 columns)
+    # 4. Convert the orchestrated DataFrame back to a notematrix (now with 9 columns)
     nmat_orch = df_orch.to_numpy()
     
-    # 7. Write out a new MIDI file using the orchestrated note matrix
+    # 5. Write out a new MIDI file using the orchestrated note matrix
     orchestrated_nmat_to_midi(nmat_orch, output_midi)
     
-    # 8. For comparison: read back the newly created MIDI file and build its note matrix
+    # 6. For comparison: read back the newly created MIDI file and build its note matrix
     midi_data_out, nmat_out = read_midi_full(output_midi)
     
-    # Build DataFrames for side-by-side comparison (including quarter-note columns)
-    columns_in = [
-        "in_onset_beats", "in_duration_beats", "in_channel", "in_pitch", "in_velocity",
-        "in_onset_sec", "in_duration_sec", "in_onset_quarters", "in_duration_quarters"
-    ]
+    # Build DataFrames for side-by-side comparison
+    columns_in = ["in_onset_beats", "in_duration_beats", "in_channel", "in_pitch", "in_velocity", "in_onset_sec", "in_duration_sec"]
+    # Update output columns to include new_channel, new_program, new_instrument
     columns_out = [
         "out_onset_beats", "out_duration_beats", "out_channel", "out_pitch", "out_velocity",
-        "out_onset_sec", "out_duration_sec", "out_onset_quarters", "out_duration_quarters"
+        "out_onset_sec", "out_duration_sec", "out_new_channel", "out_new_program", "out_new_instrument"
     ]
     
     import_df = pd.DataFrame(nmat_in, columns=columns_in)
@@ -61,7 +49,7 @@ def orchestrate_pipeline(input_midi, output_midi, comparison_xlsx="comparison.xl
     
     print(f"Orchestrated roundtrip complete.\nNew MIDI written to {output_midi}\nComparison Excel saved as {comparison_xlsx}.")
     
-    # 9. Evaluation (convert note matrices to simple note lists using onset_sec as start)
+    # 7. Evaluation (convert note matrices to simple note lists using onset_sec as start)
     def nmat_to_eval_list(nmat):
         note_list = []
         for row in nmat:
@@ -87,7 +75,7 @@ def orchestrate_pipeline(input_midi, output_midi, comparison_xlsx="comparison.xl
     print("  Scale Consistency:", scale_consistency(input_midi))
     print("  Average Polyphony:", average_polyphony(input_midi))
     
-    # 10. Visualization
+    # 8. Visualization
     orig_notes_vis = nmat_to_note_list_vis(nmat_in)
     orch_notes_vis = nmat_to_note_list_vis(nmat_out)
     

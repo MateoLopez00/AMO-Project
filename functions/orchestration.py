@@ -48,33 +48,27 @@ def apply_orchestration(note_df):
     """
     new_channels = []
     new_programs = []
-    instrument_names = []
-    
+    new_instruments = []  # NEW: to store the instrument names
     for idx, row in note_df.iterrows():
         pitch = row['pitch']
         onset_beats = row['onset_beats']
-        # Determine the note's layer based on its pitch.
         if pitch > 60:
             layer = "melody"
         elif 50 <= pitch <= 60:
             layer = "harmony"
         else:
             layer = "rhythm"
-        # Determine the current combo based on the note's onset time.
         combo = get_combo_for_beat(onset_beats, combo1_duration=16, combo2_duration=8)
-        # Choose the first candidate instrument for that combo and layer.
         instrument_name, gm_patch = instrument_combos[combo][layer][0]
         new_ch = orchestration_channels[(combo, layer)]
-        
         new_channels.append(new_ch)
         new_programs.append(gm_patch)
-        instrument_names.append(instrument_name)
-    
+        new_instruments.append(instrument_name)  # Save the instrument name
     note_df['new_channel'] = new_channels
     note_df['new_program'] = new_programs
-    note_df['instrument'] = instrument_names  # NEW column added for clarity.
-    
+    note_df['new_instrument'] = new_instruments  # NEW column
     return note_df
+
 
 def orchestrated_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=500000):
     """
