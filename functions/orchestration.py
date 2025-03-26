@@ -39,12 +39,14 @@ def apply_orchestration(note_df):
     """
     Given a DataFrame with columns:
       [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec],
-    assign new MIDI channels and GM patch numbers based on the note's pitch (to determine layer)
-    and the current combo (determined by its onset time).
-    Returns the DataFrame with two new columns: 'new_channel' and 'new_program'.
+    assign new MIDI channels and GM patch numbers based on the note's pitch (determining layer)
+    and the current combo (based on its onset time). Also, add an 'instrument' column for clarity.
+    
+    Returns the DataFrame with three new columns: 'new_channel', 'new_program', and 'instrument'.
     """
     new_channels = []
     new_programs = []
+    instruments = []
     for idx, row in note_df.iterrows():
         pitch = row['pitch']
         onset_beats = row['onset_beats']
@@ -55,13 +57,15 @@ def apply_orchestration(note_df):
         else:
             layer = "rhythm"
         combo = get_combo_for_beat(onset_beats, combo1_duration=16, combo2_duration=8)
-        # For each layer, we select the first candidate instrument from our combo.
+        # Here we select the first candidate for that combo and layer.
         instrument_name, gm_patch = instrument_combos[combo][layer][0]
         new_ch = orchestration_channels[(combo, layer)]
         new_channels.append(new_ch)
         new_programs.append(gm_patch)
+        instruments.append(instrument_name)
     note_df['new_channel'] = new_channels
     note_df['new_program'] = new_programs
+    note_df['instrument'] = instruments  # This extra column holds the instrument name.
     return note_df
 
 def orchestrated_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=500000):
