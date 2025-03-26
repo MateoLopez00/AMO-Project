@@ -6,18 +6,20 @@ def read_midi_full(filename):
     """
     Reads a MIDI file track by track, preserving:
       - All MIDI messages (with absolute tick times)
-      - Ticks per beat
+      - Ticks per beat (usually ticks per quarter note)
       - Each track's events in their original order
       - Builds a 'notematrix' from the note_on/off messages for analysis.
       
     Returns:
       - midi_data: A dict with keys 'ticks_per_beat', 'tracks' (each a dict with an 'events' list),
                    and 'type' (MIDI file type).
-      - nmat: An (N x 7) NumPy array of note data 
-              [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec]
+      - nmat: An (N x 9) NumPy array of note data with columns:
+              [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec,
+               onset_quarters, duration_quarters]
     """
     mid = mido.MidiFile(filename)
     ticks_per_beat = mid.ticks_per_beat
+    ticks_per_qn = mid.ticks_per_beat  # Ticks per quarter note
 
     tracks_data = []
     nmat_list = []
@@ -62,8 +64,12 @@ def read_midi_full(filename):
                         dur_sec = current_sec - start_sec
                         onset_beats = start_tick / ticks_per_beat
                         duration_beats = dur_ticks / ticks_per_beat
+                        # Independently compute quarter note values
+                        onset_quarters = start_tick / ticks_per_qn
+                        duration_quarters = dur_ticks / ticks_per_qn
                         nmat_list.append([
-                            onset_beats, duration_beats, channel, note, start_vel, start_sec, dur_sec
+                            onset_beats, duration_beats, channel, note, start_vel, start_sec, dur_sec,
+                            onset_quarters, duration_quarters
                         ])
                         del ongoing_notes[key]
 
@@ -81,7 +87,7 @@ def read_midi_full(filename):
         sort_idx = np.lexsort((nmat[:, 3], nmat[:, 0]))
         nmat = nmat[sort_idx]
     else:
-        nmat = np.zeros((0, 7))
+        nmat = np.zeros((0, 9))
 
     midi_data = {
         'ticks_per_beat': ticks_per_beat,
@@ -123,8 +129,10 @@ def roundtrip_example(input_midi, output_midi, comparison_xlsx="comparison.xlsx"
     write_midi_full(midi_data, output_midi)
     midi_data_out, nmat_out = read_midi_full(output_midi)
 
-    columns_in = ["in_onset_beats", "in_duration_beats", "in_channel", "in_pitch", "in_velocity", "in_onset_sec", "in_duration_sec"]
-    columns_out = ["out_onset_beats", "out_duration_beats", "out_channel", "out_pitch", "out_velocity", "out_onset_sec", "out_duration_sec"]
+    columns_in = ["in_onset_beats", "in_duration_beats", "in_channel", "in_pitch", 
+                  "in_velocity", "in_onset_sec", "in_duration_sec", "in_onset_quarters", "in_duration_quarters"]
+    columns_out = ["out_onset_beats", "out_duration_beats", "out_channel", "out_pitch", 
+                   "out_velocity", "out_onset_sec", "out_duration_sec", "out_onset_quarters", "out_duration_quarters"]
 
     import_df = pd.DataFrame(nmat_in, columns=columns_in)
     export_df = pd.DataFrame(nmat_out, columns=columns_out)
