@@ -44,11 +44,11 @@ def apply_orchestration(note_df):
     pitch (to determine its layer) and the current combo (determined by its onset time).
     
     Returns the DataFrame with three new columns: 
-      'new_channel', 'new_program', and 'instrument'.
+      'new_channel', 'new_program', and 'new_instrument'.
     """
     new_channels = []
     new_programs = []
-    new_instruments = []  # NEW: to store the instrument names
+    new_instruments = []  # To store the instrument names
     for idx, row in note_df.iterrows():
         pitch = row['pitch']
         onset_beats = row['onset_beats']
@@ -63,17 +63,21 @@ def apply_orchestration(note_df):
         new_ch = orchestration_channels[(combo, layer)]
         new_channels.append(new_ch)
         new_programs.append(gm_patch)
-        new_instruments.append(instrument_name)  # Save the instrument name
+        new_instruments.append(instrument_name)
     note_df['new_channel'] = new_channels
     note_df['new_program'] = new_programs
-    note_df['new_instrument'] = new_instruments  # NEW column
+    note_df['new_instrument'] = new_instruments
     return note_df
-
 
 def orchestrated_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=500000):
     """
-    Converts an orchestrated notematrix (with original 7 columns plus new_channel and new_program)
-    into a MIDI file.
+    Converts an orchestrated notematrix (with original 9 columns plus new_channel, new_program,
+    and new_instrument, i.e. 12 columns total) into a MIDI file.
+    Uses:
+      - Column 5: onset_sec
+      - Column 6: duration_sec
+      - Column 9: new_channel
+      - Column 10: new_program
     """
     spb = tempo / 1e6
     events = []
@@ -81,10 +85,10 @@ def orchestrated_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=5
         onset_sec = row[5]
         duration_sec = row[6]
         off_sec = onset_sec + duration_sec
-        new_ch = int(row[7])
+        new_ch = int(row[9])  # new_channel is now at index 9
         note = int(row[3])
         velocity = int(row[4])
-        prog = int(row[8])
+        prog = int(row[10])  # new_program is now at index 10
         events.append((onset_sec, 'note_on', new_ch, note, velocity))
         events.append((off_sec, 'note_off', new_ch, note, 0))
     events.sort(key=lambda x: (x[0], 0 if x[1]=='note_off' else 1))
@@ -96,8 +100,8 @@ def orchestrated_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=5
     
     unique_channels = {}
     for row in nmat:
-        ch = int(row[7])
-        prog = int(row[8])
+        ch = int(row[9])
+        prog = int(row[10])
         if ch not in unique_channels:
             unique_channels[ch] = prog
     for ch, prog in unique_channels.items():

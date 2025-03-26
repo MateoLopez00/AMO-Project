@@ -8,44 +8,49 @@ from visualization import nmat_to_note_list_vis, plot_piano_roll, plot_polyphony
 def orchestrate_pipeline(input_midi, output_midi, comparison_xlsx="comparison.xlsx"):
     # 1. Read the full MIDI and build its note matrix (nmat_in)
     midi_data, nmat_in = read_midi_full(input_midi)
+    # nmat_in is (N x 9) with columns: [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec, onset_quarters, duration_quarters]
     
-    # 2. Convert the note matrix into a DataFrame (original has 7 columns)
+    # 2. Convert the note matrix into a DataFrame (with 9 columns)
     df = pd.DataFrame(nmat_in, columns=[
-        "onset_beats", "duration_beats", "channel", "pitch", "velocity", "onset_sec", "duration_sec"
+        "onset_beats", "duration_beats", "channel", "pitch", "velocity", 
+        "onset_sec", "duration_sec", "onset_quarters", "duration_quarters"
     ])
     
     # 3. Apply orchestration logic to assign new channels, GM patch numbers, and instrument names.
     df_orch = apply_orchestration(df)
     # Now df_orch has extra columns: new_channel, new_program, and new_instrument.
     
-    # 4. Convert the orchestrated DataFrame back to a notematrix (nmat_orch will have extra columns)
+    # 4. Convert the orchestrated DataFrame back to a notematrix.
+    # This matrix now has 9 (original) + 3 (new) = 12 columns.
     nmat_orch = df_orch.to_numpy()
     
     # 5. Write out a new MIDI file using the orchestrated note matrix.
-    #    (Note: The extra columns are not stored in the MIDI file.)
     orchestrated_nmat_to_midi(nmat_orch, output_midi)
     
     # 6. For comparison: read back the newly created MIDI file and build its note matrix.
-    #    (This will have the original 7 columns.)
+    # The read-back MIDI will only have the original 9 columns.
     midi_data_out, nmat_out = read_midi_full(output_midi)
     
     # 7. Build DataFrames for side-by-side comparison.
-    # For the original, we use the 7-column matrix:
-    columns_in = ["in_onset_beats", "in_duration_beats", "in_channel", "in_pitch", "in_velocity", "in_onset_sec", "in_duration_sec"]
-    # For the orchestrated output, we want to show all extra information:
+    # Original DataFrame: 9 columns.
+    columns_in = [
+        "in_onset_beats", "in_duration_beats", "in_channel", "in_pitch", "in_velocity", 
+        "in_onset_sec", "in_duration_sec", "in_onset_quarters", "in_duration_quarters"
+    ]
+    # Orchestrated output: 12 columns.
     columns_orch = [
-        "out_onset_beats", "out_duration_beats", "out_channel", "out_pitch", "out_velocity",
-        "out_onset_sec", "out_duration_sec", "out_new_channel", "out_new_program", "out_new_instrument"
+        "out_onset_beats", "out_duration_beats", "out_channel", "out_pitch", "out_velocity", 
+        "out_onset_sec", "out_duration_sec", "out_onset_quarters", "out_duration_quarters",
+        "out_new_channel", "out_new_program", "out_new_instrument"
     ]
     
-    # Use the original note matrix for the original DataFrame.
     import_df = pd.DataFrame(nmat_in, columns=columns_in)
-    # For the orchestrated output, use our in‑memory df_orch (which still has the extra columns)
+    # For orchestrated output, use our in‑memory DataFrame df_orch.
     export_df = df_orch.copy()
     export_df.columns = columns_orch
     
-    # Since the original DataFrame has 7 columns and the orchestrated one has 10, pad the original with blank columns.
-    for col in columns_orch[7:]:
+    # Since the original has 9 columns and orchestrated has 12, pad the original with blank columns.
+    for col in columns_orch[9:]:
         import_df[col] = ""
     
     import_df = import_df.sort_values(by=["in_onset_beats", "in_pitch"]).reset_index(drop=True)
