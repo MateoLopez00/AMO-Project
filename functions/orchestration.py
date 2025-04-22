@@ -16,15 +16,16 @@ instrument_combos = {
     }
 }
 
-# Mapping from (combo, layer) to new MIDI channel.
+# Mapping from (combo, layer) to true GM channel numbers (1-16).
 orchestration_channels = {
-    ("combo1", "melody"): 0,
-    ("combo1", "harmony"): 1,
-    ("combo1", "rhythm"): 2,
-    ("combo2", "melody"): 3,
-    ("combo2", "harmony"): 4,
-    ("combo2", "rhythm"): 5
+    ("combo1", "melody"): 1,
+    ("combo1", "harmony"): 2,
+    ("combo1", "rhythm"): 3,
+    ("combo2", "melody"): 4,
+    ("combo2", "harmony"): 5,
+    ("combo2", "rhythm"): 6
 }
+
 
 def get_combo_for_beat(start, combo1_duration=16, combo2_duration=8):
     """
@@ -35,88 +36,100 @@ def get_combo_for_beat(start, combo1_duration=16, combo2_duration=8):
     mod = start % cycle
     return "combo1" if mod < combo1_duration else "combo2"
 
+
 def apply_orchestration(note_df):
     """
-    Given a DataFrame with columns:
-      [onset_beats, duration_beats, channel, pitch, velocity, onset_sec, duration_sec,
-       onset_quarters, duration_quarters],
-    assign new MIDI channels, GM patch numbers, and an instrument name based on the note's
-    pitch (to determine its layer) and the current combo (determined by its onset time).
-    
-    Returns the DataFrame with three new columns: 
-      'new_channel', 'new_program', and 'new_instrument'.
+    Assigns new MIDI channels (1-16), GM patch numbers, and instrument names
+    to each note based on its pitch and beat position.
+    Adds three new columns: 'new_channel', 'new_program', 'new_instrument'.
     """
     new_channels = []
     new_programs = []
-    new_instruments = []  # To store the instrument names
-    for idx, row in note_df.iterrows():
+    new_instruments = []
+
+    for _, row in note_df.iterrows():
         pitch = row['pitch']
         onset_beats = row['onset_beats']
+
+        # Determine layer by pitch
         if pitch > 60:
             layer = "melody"
         elif 50 <= pitch <= 60:
             layer = "harmony"
         else:
             layer = "rhythm"
-        combo = get_combo_for_beat(onset_beats, combo1_duration=16, combo2_duration=8)
+
+        # Determine which combo applies for this note
+        combo = get_combo_for_beat(onset_beats)
+
+        # Lookup GM channel and program
+        gm_channel = orchestration_channels[(combo, layer)]
         instrument_name, gm_patch = instrument_combos[combo][layer][0]
-        new_ch = orchestration_channels[(combo, layer)]
-        new_channels.append(new_ch)
+
+        new_channels.append(gm_channel)
         new_programs.append(gm_patch)
         new_instruments.append(instrument_name)
+
     note_df['new_channel'] = new_channels
     note_df['new_program'] = new_programs
     note_df['new_instrument'] = new_instruments
     return note_df
 
+
 def orchestrated_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=500000):
     """
-    Converts an orchestrated notematrix (with original 9 columns plus new_channel, new_program,
-    and new_instrument, i.e. 12 columns total) into a MIDI file.
-    Uses:
-      - Column 5: onset_sec
-      - Column 6: duration_sec
-      - Column 9: new_channel
-      - Column 10: new_program
+    Converts an orchestrated notematrix (with 9 original + 3 new columns) into a MIDI file.
+    Expects 'new_channel' in column index 9 (1-16) and 'new_program' in index 10.
     """
     spb = tempo / 1e6
     events = []
+
+    # Build note_on/note_off events list
     for row in nmat:
         onset_sec = row[5]
         duration_sec = row[6]
         off_sec = onset_sec + duration_sec
-        new_ch = int(row[9])  # new_channel is now at index 9
+        gm_channel = int(row[9])     # 1-16
         note = int(row[3])
         velocity = int(row[4])
-        prog = int(row[10])  # new_program is now at index 10
-        events.append((onset_sec, 'note_on', new_ch, note, velocity))
-        events.append((off_sec, 'note_off', new_ch, note, 0))
-    events.sort(key=lambda x: (x[0], 0 if x[1]=='note_off' else 1))
-    
+
+        # Mido channels are 0-based, so subtract 1
+        ch = gm_channel - 1
+        events.append((onset_sec, 'note_on', ch, note, velocity))
+        events.append((off_sec, 'note_off', ch, note, 0))
+
+    # Sort by time (and note_off before note_on at same time)
+    events.sort(key=lambda x: (x[0], 0 if x[1] == 'note_off' else 1))
+
+    # Create MIDI file and track
     mid = mido.MidiFile(ticks_per_beat=ticks_per_beat)
     track = mido.MidiTrack()
     mid.tracks.append(track)
     track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=0))
-    
+
+    # Program changes for each used channel
     unique_channels = {}
     for row in nmat:
-        ch = int(row[9])
+        gm_channel = int(row[9])
         prog = int(row[10])
+        ch = gm_channel - 1
         if ch not in unique_channels:
             unique_channels[ch] = prog
+
     for ch, prog in unique_channels.items():
         track.append(mido.Message('program_change', channel=ch, program=prog, time=0))
-    
+
+    # Write all note events with proper delta times
     prev_time_sec = 0.0
-    for event in events:
-        current_time_sec = event[0]
-        delta_sec = current_time_sec - prev_time_sec
+    for t_sec, kind, ch, note, vel in events:
+        delta_sec = t_sec - prev_time_sec
         delta_ticks = int(round(delta_sec / spb * ticks_per_beat))
-        if event[1] == 'note_on':
-            msg = mido.Message('note_on', channel=event[2], note=event[3], velocity=event[4], time=delta_ticks)
+        if kind == 'note_on':
+            msg = mido.Message('note_on', channel=ch, note=note, velocity=vel, time=delta_ticks)
         else:
-            msg = mido.Message('note_off', channel=event[2], note=event[3], velocity=0, time=delta_ticks)
+            msg = mido.Message('note_off', channel=ch, note=note, velocity=0, time=delta_ticks)
         track.append(msg)
-        prev_time_sec = current_time_sec
+        prev_time_sec = t_sec
+
     mid.save(output_filename)
     print(f"Saved orchestrated MIDI to {output_filename}")
