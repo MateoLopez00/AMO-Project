@@ -1,5 +1,5 @@
 import numpy as np
-from midi_processing import write_midi_full
+from midi_processing import write_midi_full, read_midi_full
 from orchestration import write_array_to_midi
 
 def nmat_to_note_list(nmat):
