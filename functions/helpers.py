@@ -1,45 +1,8 @@
 import numpy as np
-from midi_processing import read_midi_full, write_midi_full
+from midi_processing import read_midi_full
 from orchestration import write_array_to_midi
 
-def write_matrix_or_data(data, output_filename, midi_file=None, ticks_per_beat=480, tempo=500000):
-    """
-    Dispatch helper: write MIDI from either:
-      - a full midi_data dict (exact round-trip),
-      - a raw 9-column note matrix + midi_file path (exact round-trip),
-      - an enriched >=11-column matrix (orchestrated or custom write).
-
-    Args:
-      data: midi_data dict or NumPy note-matrix.
-      output_filename: path to save the .mid file.
-      midi_file: optional path to original MIDI when only raw matrix is provided.
-      ticks_per_beat: MIDI PPQ (default 480).
-      tempo: tempo in microseconds per beat (default 500000 = 120 BPM).
-    """
-    # Case 1: full-midi dict → exact round-trip
-    if isinstance(data, dict):
-        write_midi_full(data, output_filename)
-        return
-
-    # Case 2: NumPy note-matrix
-    if isinstance(data, np.ndarray):
-        cols = data.shape[1]
-        # Raw 9-col → exact round-trip from original file
-        if cols == 9:
-            if midi_file is None:
-                raise ValueError(
-                    "To round-trip a raw note matrix, you must supply the midi_file path."
-                )
-            midi_data, _ = read_midi_full(midi_file)
-            write_midi_full(midi_data, output_filename)
-            return
-        # Enriched >=11-col → write via array→MIDI (drops original metadata)
-        write_array_to_midi(data, output_filename, ticks_per_beat, tempo)
-        return
-
-    raise TypeError("Data must be a midi_data dict or a NumPy note-matrix.")
-
-
+# --- Note matrix extraction ---
 def extract_note_matrix(midi_file):
     """
     Load a MIDI file and return its raw 9-column note matrix.
@@ -47,27 +10,40 @@ def extract_note_matrix(midi_file):
     _, nmat = read_midi_full(midi_file)
     return nmat
 
-
+# --- Enrich matrix with new columns ---
 def enrich_nmat(nmat, new_channels, new_programs):
     """
     Given a raw 9-column note matrix, append two columns:
-      - new_channels (int array or scalar)
-      - new_programs (int array or scalar)
-    Returns an (N x 11) NumPy array ready for write_array_to_midi.
+      - new_channels (int or array)
+      - new_programs (int or array)
+    Returns an (N x 11) NumPy array for write_array_to_midi.
     """
-    # ensure array form
-    new_ch = np.full((nmat.shape[0],), new_channels) if np.ndim(new_channels) == 0 else np.array(new_channels)
-    new_pr = np.full((nmat.shape[0],), new_programs) if np.ndim(new_programs) == 0 else np.array(new_programs)
-    return np.concatenate([nmat, new_ch[:, None], new_pr[:, None]], axis=1)
+    # prepare arrays
+    new_ch = (np.full((nmat.shape[0],), new_channels) if np.ndim(new_channels)==0
+              else np.array(new_channels))
+    new_pr = (np.full((nmat.shape[0],), new_programs) if np.ndim(new_programs)==0
+              else np.array(new_programs))
+    return np.concatenate([nmat, new_ch[:,None], new_pr[:,None]], axis=1)
 
+# --- Write raw note-matrix to MIDI ---
+def write_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=500000):
+    """
+    Turn a raw 9-column matrix into a MIDI file by using original channel as GM channel
+    and default program 0 (Acoustic Grand Piano) for all notes.
+    """
+    # derive new_channel/program from original channel
+    # original channel column is index 2 (0-based), zero-based
+    # GM channels are 1-based
+    channels = nmat[:,2].astype(int) + 1
+    programs = np.zeros_like(channels)
+    # enrich to 11 columns
+    nmat_enriched = enrich_nmat(nmat, channels, programs)
+    write_array_to_midi(nmat_enriched, output_filename, ticks_per_beat, tempo)
 
-def roundtrip_nmat(nmat, midi_file, output_filename):
+# --- Alias for roundtrip without orchestration ---
+def roundtrip_nmat(nmat, output_filename, ticks_per_beat=480, tempo=500000):
     """
-    Given a 9-column note matrix and the original MIDI path,
-    re-emit a faithful MIDI file containing exactly those notes
-    (plus all original metadata).
+    Write out a MIDI containing exactly the notes in a 9-col note matrix,
+    using original channels and default piano patch.
     """
-    midi_data, _ = read_midi_full(midi_file)
-    # This writes back the original midi_data (with only those notes retained,
-    # since you’ll overwrite midi_data['tracks'] if you want to filter)
-    write_midi_full(midi_data, output_filename)
+    write_nmat_to_midi(nmat, output_filename, ticks_per_beat, tempo)
