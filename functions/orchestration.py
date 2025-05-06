@@ -133,3 +133,11 @@ def orchestrated_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=5
 
     mid.save(output_filename)
     print(f"Saved orchestrated MIDI to {output_filename}")
+
+
+def write_array_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=500000):
+    """
+    Converts a note matrix array back into a MIDI file.
+    This is a convenience wrapper around orchestrated_nmat_to_midi.
+    """
+    orchestrated_nmat_to_midi(nmat, output_filename, ticks_per_beat, tempo)
