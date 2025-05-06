@@ -42,7 +42,7 @@ def write_matrix_or_data(data, output_filename, midi_file=None, ticks_per_beat=4
 
 def extract_note_matrix(midi_file):
     """
-    Load a MIDI file and return only its 9-column note matrix as a NumPy array.
+    Load a MIDI file and return its raw 9-column note matrix.
     """
     _, nmat = read_midi_full(midi_file)
     return nmat
@@ -63,7 +63,11 @@ def enrich_nmat(nmat, new_channels, new_programs):
 
 def roundtrip_nmat(nmat, midi_file, output_filename):
     """
-    Round-trip a raw 9-column note matrix back to a MIDI file by re-reading the original file's metadata.
+    Given a 9-column note matrix and the original MIDI path,
+    re-emit a faithful MIDI file containing exactly those notes
+    (plus all original metadata).
     """
     midi_data, _ = read_midi_full(midi_file)
+    # This writes back the original midi_data (with only those notes retained,
+    # since you’ll overwrite midi_data['tracks'] if you want to filter)
     write_midi_full(midi_data, output_filename)
