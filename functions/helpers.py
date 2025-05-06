@@ -56,10 +56,9 @@ def enrich_nmat(nmat, new_channels, new_programs):
     Returns an (N x 11) NumPy array ready for write_array_to_midi.
     """
     # ensure array form
-    new_ch = np.full((nmat.shape[0],), new_channels) if np.ndim(new_channels)==0 else np.array(new_channels)
-    new_pr = np.full((nmat.shape[0],), new_programs) if np.ndim(new_programs)==0 else np.array(new_programs)
-    # stack on the right
-    return np.concatenate([nmat, new_ch[:,None], new_pr[:,None]], axis=1)
+    new_ch = np.full((nmat.shape[0],), new_channels) if np.ndim(new_channels) == 0 else np.array(new_channels)
+    new_pr = np.full((nmat.shape[0],), new_programs) if np.ndim(new_programs) == 0 else np.array(new_programs)
+    return np.concatenate([nmat, new_ch[:, None], new_pr[:, None]], axis=1)
 
 
 def roundtrip_nmat(nmat, midi_file, output_filename):
@@ -68,40 +67,3 @@ def roundtrip_nmat(nmat, midi_file, output_filename):
     """
     midi_data, _ = read_midi_full(midi_file)
     write_midi_full(midi_data, output_filename)
-
-(data, output_filename, midi_file=None, ticks_per_beat=480, tempo=500000):
-    """
-    Helper to write MIDI from either:
-      - a full midi_data dict (exact round-trip),
-      - a raw 9-column note matrix + midi_file path (round-trip),
-      - an enriched >=11-column matrix (orchestrated write).
-
-    Args:
-      data: midi_data dict or NumPy note-matrix.
-      output_filename: path to save the .mid file.
-      midi_file: optional path to original MIDI when only raw matrix is provided.
-      ticks_per_beat: MIDI PPQ (default 480).
-      tempo: tempo in microseconds per beat (default 500000 = 120 BPM).
-    """
-    # Case 1: full-midi dict → exact round-trip
-    if isinstance(data, dict):
-        write_midi_full(data, output_filename)
-        return
-
-    # Case 2: NumPy note-matrix
-    if isinstance(data, np.ndarray):
-        cols = data.shape[1]
-        # Raw 9-col → need midi_file to read full midi_data
-        if cols == 9:
-            if midi_file is None:
-                raise ValueError(
-                    "To round-trip a raw note matrix, you must supply the midi_file path."
-                )
-            midi_data, _ = read_midi_full(midi_file)
-            write_midi_full(midi_data, output_filename)
-            return
-        # Enriched >=11-col → orchestrated write
-        write_array_to_midi(data, output_filename, ticks_per_beat, tempo)
-        return
-
-    raise TypeError("Data must be a midi_data dict or a NumPy note-matrix.")
