@@ -18,32 +18,26 @@ def enrich_nmat(nmat, new_channels, new_programs):
       - new_programs (int or array)
     Returns an (N x 11) NumPy array for write_array_to_midi.
     """
-    # prepare arrays
-    new_ch = (np.full((nmat.shape[0],), new_channels) if np.ndim(new_channels)==0
-              else np.array(new_channels))
-    new_pr = (np.full((nmat.shape[0],), new_programs) if np.ndim(new_programs)==0
-              else np.array(new_programs))
-    return np.concatenate([nmat, new_ch[:,None], new_pr[:,None]], axis=1)
+    new_ch = (np.full(nmat.shape[0], new_channels) if np.ndim(new_channels)==0 else np.array(new_channels))
+    new_pr = (np.full(nmat.shape[0], new_programs) if np.ndim(new_programs)==0 else np.array(new_programs))
+    return np.concatenate([nmat, new_ch[:, None], new_pr[:, None]], axis=1)
 
-# --- Write raw note-matrix to MIDI ---
-def write_nmat_to_midi(nmat, output_filename, ticks_per_beat=480, tempo=500000):
+# --- Write raw note-matrix to MIDI preserving metadata ---
+def roundtrip_nmat(nmat, midi_file, output_filename, ticks_per_beat=480, tempo=500000):
     """
-    Turn a raw 9-column matrix into a MIDI file by using original channel as GM channel
-    and default program 0 (Acoustic Grand Piano) for all notes.
-    """
-    # derive new_channel/program from original channel
-    # original channel column is index 2 (0-based), zero-based
-    # GM channels are 1-based
-    channels = nmat[:,2].astype(int) + 1
-    programs = np.zeros_like(channels)
-    # enrich to 11 columns
-    nmat_enriched = enrich_nmat(nmat, channels, programs)
-    write_array_to_midi(nmat_enriched, output_filename, ticks_per_beat, tempo)
+    Write a MIDI containing exactly the notes in a 9-col note matrix,
+    preserving metadata from the original MIDI file.
 
-# --- Alias for roundtrip without orchestration ---
-def roundtrip_nmat(nmat, output_filename, ticks_per_beat=480, tempo=500000):
+    Args:
+      nmat: N×9 array of notes
+      midi_file: path to original .mid for metadata
+      output_filename: where to save the new .mid
+      ticks_per_beat, tempo: optional defaults
     """
-    Write out a MIDI containing exactly the notes in a 9-col note matrix,
-    using original channels and default piano patch.
-    """
-    write_nmat_to_midi(nmat, output_filename, ticks_per_beat, tempo)
+    # Delegate to write_array_to_midi with metadata copy
+    write_array_to_midi(
+        nmat, output_filename,
+        midi_file=midi_file,
+        ticks_per_beat=ticks_per_beat,
+        tempo=tempo
+    )
