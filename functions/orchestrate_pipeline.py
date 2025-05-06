@@ -1,6 +1,5 @@
 from midi_processing import read_midi_full
-from orchestration import apply_orchestration
-from helpers import write_matrix_or_data
+from orchestration import apply_orchestration, write_array_to_midi
 from evaluation import evaluate_orchestration, pitch_class_entropy, scale_consistency, average_polyphony
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -24,8 +23,8 @@ def orchestrate_pipeline(input_midi, output_midi, comparison_xlsx="comparison.xl
     # 4. Convert orchestrated DataFrame back to NumPy array
     nmat_orch = df_orch.to_numpy()
 
-    # 5. Write orchestrated MIDI from array using helper
-    write_matrix_or_data(nmat_orch, output_midi)
+    # 5. Write orchestrated MIDI from array
+    write_array_to_midi(nmat_orch, output_midi)
     print(f"Orchestrated MIDI written to {output_midi}")
 
     # 6. Read back the new MIDI for comparison
