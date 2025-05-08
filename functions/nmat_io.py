@@ -95,3 +95,15 @@ def nmat_to_midi(nmat_data, output_filename):
 
     # Save file
     mid.save(output_filename)
+
+
+def nmat_to_excel(nmat_data, excel_filename):
+    """
+    Export the note matrix from nmat_data to an Excel file.
+    Produces a sheet with columns:
+      start_tick, duration_ticks, channel, pitch, velocity
+    """
+    import pandas as pd
+    cols = ['start_tick', 'duration_ticks', 'channel', 'pitch', 'velocity']
+    df = pd.DataFrame(nmat_data['notes'], columns=cols)
+    df.to_excel(excel_filename, index=False)
