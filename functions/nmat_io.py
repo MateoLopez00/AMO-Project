@@ -15,15 +15,13 @@ def midi_to_nmat(filename):
     ticks_per_beat = mid.ticks_per_beat
     type_ = mid.type
 
-    # Extract all meta messages from all tracks
+    # Extract all meta messages from the first track only
     meta_events = []
-    for track in mid.tracks:
-        abs_tick = 0
-        for msg in track:
-            abs_tick += msg.time
-            if msg.is_meta:
-                # copy to avoid reference issues
-                meta_events.append((abs_tick, msg.copy()))
+    abs_tick = 0
+    for msg in mid.tracks[0]:
+        abs_tick += msg.time
+        if msg.is_meta:
+            meta_events.append((abs_tick, msg.copy()))
 
     # Extract note events from all tracks
     nmat_list = []
