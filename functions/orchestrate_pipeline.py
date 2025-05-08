@@ -24,7 +24,11 @@ def orchestrate_pipeline(input_midi, output_midi, comparison_xlsx="comparison.xl
     nmat_orch = df_orch.to_numpy()
 
     # 5. Write orchestrated MIDI from array, preserving original metadata
-    write_array_to_midi(nmat_orch, output_midi, midi_file=input_midi)
+    write_array_to_midi(
+        nmat_orch,
+        output_midi,
+        midi_file=input_midi  # ensures tempo, signatures, and other meta-events are copied
+    )
     print(f"Orchestrated MIDI with metadata written to {output_midi}")
 
     # 6. Read back the new MIDI for comparison
