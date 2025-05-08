@@ -7,7 +7,7 @@ def midi_to_nmat(filename):
     Read a MIDI file and return a dictionary containing:
       - 'ticks_per_beat': int
       - 'type': int (MIDI file type)
-      - 'meta_events': list of (abs_tick, MetaMessage) for all meta events in track 0
+      - 'meta_events': list of (abs_tick, MetaMessage) for all meta events in any track
       - 'notes': numpy array of shape (N, 5) with columns:
           [start_tick, duration_ticks, channel, pitch, velocity]
     """
@@ -15,13 +15,15 @@ def midi_to_nmat(filename):
     ticks_per_beat = mid.ticks_per_beat
     type_ = mid.type
 
-    # Extract all meta messages from the first track
+    # Extract all meta messages from all tracks
     meta_events = []
-    abs_tick = 0
-    for msg in mid.tracks[0]:
-        abs_tick += msg.time
-        if msg.is_meta:
-            meta_events.append((abs_tick, msg.copy()))
+    for track in mid.tracks:
+        abs_tick = 0
+        for msg in track:
+            abs_tick += msg.time
+            if msg.is_meta:
+                # copy to avoid reference issues
+                meta_events.append((abs_tick, msg.copy()))
 
     # Extract note events from all tracks
     nmat_list = []
@@ -40,6 +42,9 @@ def midi_to_nmat(filename):
                     nmat_list.append([start_tick, duration, msg.channel, msg.note, velocity])
     notes = np.array(nmat_list, dtype=int)
 
+    # Sort meta events by tick
+    meta_events.sort(key=lambda x: x[0])
+
     return {
         'ticks_per_beat': ticks_per_beat,
         'type': type_,
@@ -55,7 +60,7 @@ def nmat_to_midi(nmat_data, output_filename):
     - Writes note-on/off events in a second track.
     """
     # Create new MidiFile with two tracks (meta + notes)
-    mid = mido.MidiFile(type=1 if nmat_data['type'] > 0 else nmat_data['type'],
+    mid = mido.MidiFile(type=nmat_data['type'],
                         ticks_per_beat=nmat_data['ticks_per_beat'])
     meta_track = mido.MidiTrack()
     note_track = mido.MidiTrack()
@@ -64,11 +69,10 @@ def nmat_to_midi(nmat_data, output_filename):
 
     # 1) Write all meta events into meta_track
     prev_tick = 0
-    for tick, msg in sorted(nmat_data['meta_events'], key=lambda x: x[0]):
+    for tick, msg in nmat_data['meta_events']:
         delta = tick - prev_tick
         meta_track.append(msg.copy(time=delta))
         prev_tick = tick
-    # End of track for meta
     meta_track.append(mido.MetaMessage('end_of_track', time=0))
 
     # 2) Collect note-on/off events
@@ -81,7 +85,6 @@ def nmat_to_midi(nmat_data, output_filename):
 
     # 3) Write note events into note_track
     prev_tick = 0
-    # Optionally, insert program_changes here if needed
     for abs_tick, kind, ch, pitch, vel in events:
         delta = abs_tick - prev_tick
         if kind == 'note_on':
@@ -90,7 +93,6 @@ def nmat_to_midi(nmat_data, output_filename):
             msg = mido.Message('note_off', channel=ch, note=pitch, velocity=0, time=delta)
         note_track.append(msg)
         prev_tick = abs_tick
-    # End of track for notes
     note_track.append(mido.MetaMessage('end_of_track', time=0))
 
     # Save file
