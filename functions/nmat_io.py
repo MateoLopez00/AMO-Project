@@ -51,40 +51,47 @@ def midi_to_nmat(filename):
 def nmat_to_midi(nmat_data, output_filename):
     """
     Write a MIDI file from the dictionary produced by midi_to_nmat.
-    - Preserves original file type, ticks_per_beat, and all meta events from track 0.
-    - Writes only note-on/off events from nmat_data['notes'], merging them with meta events in one track.
+    - Preserves original file type, ticks_per_beat, and all meta events in a dedicated meta track.
+    - Writes note-on/off events in a second track.
     """
-    mid = mido.MidiFile(type=nmat_data['type'], ticks_per_beat=nmat_data['ticks_per_beat'])
-    track = mido.MidiTrack()
-    mid.tracks.append(track)
+    # Create new MidiFile with two tracks (meta + notes)
+    mid = mido.MidiFile(type=1 if nmat_data['type'] > 0 else nmat_data['type'],
+                        ticks_per_beat=nmat_data['ticks_per_beat'])
+    meta_track = mido.MidiTrack()
+    note_track = mido.MidiTrack()
+    mid.tracks.append(meta_track)
+    mid.tracks.append(note_track)
 
-    # Build combined event list: (abs_tick, priority, data)
-    events = []
-    # Meta events: priority 0
-    for tick, msg in nmat_data['meta_events']:
-        events.append((tick, 0, msg))
-    # Note events: priority 1
-    for start, duration, ch, pitch, vel in nmat_data['notes']:
-        events.append((start,        1, ('on',  ch, pitch, vel)))
-        events.append((start+duration,1, ('off', ch, pitch, 0)))
-    # Sort by absolute tick, then meta before notes
-    events.sort(key=lambda e: (e[0], e[1]))
-
-    # Write events with proper delta times
+    # 1) Write all meta events into meta_track
     prev_tick = 0
-    for abs_tick, prio, data in events:
-        delta = abs_tick - prev_tick
-        if prio == 0:
-            # meta message
-            meta = data.copy(time=delta)
-            track.append(meta)
-        else:
-            kind, ch, pitch, vel = data
-            if kind == 'on':
-                msg = mido.Message('note_on', channel=ch, note=pitch, velocity=vel, time=delta)
-            else:
-                msg = mido.Message('note_off', channel=ch, note=pitch, velocity=vel, time=delta)
-            track.append(msg)
-        prev_tick = abs_tick
+    for tick, msg in sorted(nmat_data['meta_events'], key=lambda x: x[0]):
+        delta = tick - prev_tick
+        meta_track.append(msg.copy(time=delta))
+        prev_tick = tick
+    # End of track for meta
+    meta_track.append(mido.MetaMessage('end_of_track', time=0))
 
+    # 2) Collect note-on/off events
+    events = []  # (abs_tick, kind, channel, pitch, velocity)
+    for start, duration, ch, pitch, vel in nmat_data['notes']:
+        events.append((start,        'note_on',  ch, pitch, vel))
+        events.append((start+duration,'note_off', ch, pitch, 0))
+    # Sort by time, note_off before note_on at same tick
+    events.sort(key=lambda e: (e[0], 0 if e[1]=='note_off' else 1))
+
+    # 3) Write note events into note_track
+    prev_tick = 0
+    # Optionally, insert program_changes here if needed
+    for abs_tick, kind, ch, pitch, vel in events:
+        delta = abs_tick - prev_tick
+        if kind == 'note_on':
+            msg = mido.Message('note_on', channel=ch, note=pitch, velocity=vel, time=delta)
+        else:
+            msg = mido.Message('note_off', channel=ch, note=pitch, velocity=0, time=delta)
+        note_track.append(msg)
+        prev_tick = abs_tick
+    # End of track for notes
+    note_track.append(mido.MetaMessage('end_of_track', time=0))
+
+    # Save file
     mid.save(output_filename)
