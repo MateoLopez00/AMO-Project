@@ -26,14 +26,12 @@ orchestration_channels = {
     ("combo2", "rhythm"): 6
 }
 
-
 def get_combo_for_beat(start, combo1_duration=16, combo2_duration=8):
     """
     Determine which combo applies for a given start beat.
     """
     cycle = combo1_duration + combo2_duration
     return "combo1" if (start % cycle) < combo1_duration else "combo2"
-
 
 def apply_orchestration(note_df):
     """
@@ -65,7 +63,6 @@ def apply_orchestration(note_df):
     note_df['new_instrument'] = new_instruments
     return note_df
 
-
 def orchestrated_nmat_to_midi(nmat, output_filename, midi_file=None,
                                ticks_per_beat=480, tempo=500000):
     """
@@ -77,7 +74,6 @@ def orchestrated_nmat_to_midi(nmat, output_filename, midi_file=None,
     # Enrich raw 9-col matrix
     ncols = nmat.shape[1]
     if ncols == 9:
-        # original channel in col 2, convert to GM channel (1-16)
         ch = nmat[:, 2].astype(int) + 1
         pr = np.zeros_like(ch)
         nmat = np.concatenate([nmat, ch[:, None], pr[:, None]], axis=1)
@@ -97,46 +93,53 @@ def orchestrated_nmat_to_midi(nmat, output_filename, midi_file=None,
         track = mido.MidiTrack(); mid.tracks.append(track)
         track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=0))
 
-    # Build note events
-    spb = tempo / 1e6  # seconds per beat
-    events = []
+    # === Updated block: Build note events in ticks ===
+    # Use onset_quarters (col 7) and duration_quarters (col 8) to compute ticks
+    events = []  # (abs_tick, is_off, channel, pitch, velocity)
     for row in nmat:
-        t_on = float(row[5]); dur = float(row[6])
-        t_off = t_on + dur
-        gm_ch = int(row[9]); ch = gm_ch - 1
-        note = int(row[3]); vel = int(row[4])
-        events.append((t_on,  False, ch, note, vel))  # False => on
-        events.append((t_off, True,  ch, note, 0))    # True  => off
-    # sort by time, off before on (True < False)
-    events.sort(key=lambda x:(x[0], x[1]))
+        onset_q  = row[7]
+        dur_q    = row[8]
+        onset_tick = int(round(onset_q * mid.ticks_per_beat))
+        dur_ticks  = int(round(dur_q * mid.ticks_per_beat))
+        off_tick   = onset_tick + dur_ticks
+
+        ch   = int(row[9]) - 1    # new_channel col 9 → zero-based
+        note = int(row[3])
+        vel  = int(row[4])
+        # note_on = False priority, note_off = True
+        events.append((onset_tick, False, ch, note, vel))
+        events.append((off_tick,   True,  ch, note, 0))
+
+    # Sort by tick, with note_off before note_on when tied
+    events.sort(key=lambda e: (e[0], e[1]))
 
     # Program changes
     used = {}
     for row in nmat:
-        ch = int(row[9]) - 1; pr = int(row[10])
+        ch = int(row[9]) - 1
+        pr = int(row[10])
         if ch not in used:
             used[ch] = pr
     for ch, pr in used.items():
-        track.append(mido.Message('program_change', channel=ch,
-                                  program=pr, time=0))
+        track.append(mido.Message('program_change',
+                                  channel=ch, program=pr, time=0))
 
-    # Write note events
-    prev_t = 0.0
-    for t, is_off, ch, note, vel in events:
-        delta_ticks = int(round((t - prev_t) / spb * mid.ticks_per_beat))
+    # Write note events with delta ticks
+    last_tick = 0
+    for abs_tick, is_off, ch, note, vel in events:
+        delta = abs_tick - last_tick
         if not is_off:
-            msg = mido.Message('note_on', channel=ch,
-                                note=note, velocity=vel, time=delta_ticks)
+            msg = mido.Message('note_on',  channel=ch,
+                                note=note, velocity=vel, time=delta)
         else:
             msg = mido.Message('note_off', channel=ch,
-                                note=note, velocity=0, time=delta_ticks)
+                                note=note, velocity=0,   time=delta)
         track.append(msg)
-        prev_t = t
+        last_tick = abs_tick
 
     # Final end_of_track
     track.append(mido.MetaMessage('end_of_track', time=0))
     mid.save(output_filename)
-
 
 def write_array_to_midi(nmat, output_filename, midi_file=None,
                         ticks_per_beat=480, tempo=500000):
