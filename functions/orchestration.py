@@ -81,10 +81,81 @@ def apply_orchestration(note_df):
 
 def orchestrated_nmat_to_midi(nmat, output_filename, midi_file=None,
                                ticks_per_beat=480, tempo=500000):
-    # ... existing code ...
-    pass
+    """
+    Build a new MIDI file from a note-matrix, preserving metadata if provided.
+    Supports raw (9-col) or enriched (>=11-col) matrices:
+      - 9 columns: auto-enrich with original channel and piano patch
+      - >=11 columns: use provided new_channel/new_program columns
+    """
+    # Enrich raw 9-col matrix if needed
+    ncols = nmat.shape[1]
+    if ncols == 9:
+        ch = nmat[:, 2].astype(int) + 1
+        pr = np.zeros_like(ch)
+        nmat = np.concatenate([nmat, ch[:, None], pr[:, None]], axis=1)
+
+    # Create MidiFile and primary track with metadata
+    if midi_file:
+        orig = mido.MidiFile(midi_file)
+        mid = mido.MidiFile(type=orig.type, ticks_per_beat=orig.ticks_per_beat)
+        track = mido.MidiTrack(); mid.tracks.append(track)
+        for msg in orig.tracks[0]:
+            if msg.is_meta and msg.type != 'end_of_track':
+                track.append(msg.copy(time=msg.time))
+    else:
+        mid = mido.MidiFile(ticks_per_beat=ticks_per_beat)
+        track = mido.MidiTrack(); mid.tracks.append(track)
+        track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=0))
+
+    # Build note events in ticks
+    events = []  # (abs_tick, is_off, channel, pitch, velocity)
+    for row in nmat:
+        onset_q  = row[7]
+        dur_q    = row[8]
+        onset_tick = int(round(onset_q * mid.ticks_per_beat))
+        dur_ticks  = int(round(dur_q * mid.ticks_per_beat))
+        off_tick   = onset_tick + dur_ticks
+
+        ch   = int(row[9]) - 1
+        note = int(row[3])
+        vel  = int(row[4])
+        events.append((onset_tick, False, ch, note, vel))
+        events.append((off_tick,   True,  ch, note, 0))
+    events.sort(key=lambda e: (e[0], e[1]))
+
+    # Program changes
+    used = {}
+    for row in nmat:
+        ch = int(row[9]) - 1; pr = int(row[10])
+        if ch not in used:
+            used[ch] = pr
+    for ch, pr in used.items():
+        track.append(mido.Message('program_change', channel=ch, program=pr, time=0))
+
+    # Write note events
+    last_tick = 0
+    for abs_tick, is_off, ch, note, vel in events:
+        delta = abs_tick - last_tick
+        if not is_off:
+            msg = mido.Message('note_on', channel=ch, note=note, velocity=vel, time=delta)
+        else:
+            msg = mido.Message('note_off', channel=ch, note=note, velocity=0, time=delta)
+        track.append(msg)
+        last_tick = abs_tick
+
+    # End of track
+    track.append(mido.MetaMessage('end_of_track', time=0))
+    mid.save(output_filename)
+
 
 def write_array_to_midi(nmat, output_filename, midi_file=None,
+                        ticks_per_beat=480, tempo=500000):
+    """Wrapper for orchestrated_nmat_to_midi"""
+    orchestrated_nmat_to_midi(nmat, output_filename,
+                               midi_file=midi_file,
+                               ticks_per_beat=ticks_per_beat,
+                               tempo=tempo)
+(nmat, output_filename, midi_file=None,
                         ticks_per_beat=480, tempo=500000):
     """Wrapper for orchestrated_nmat_to_midi"""
     orchestrated_nmat_to_midi(nmat, output_filename,
