@@ -155,10 +155,3 @@ def write_array_to_midi(nmat, output_filename, midi_file=None,
                                midi_file=midi_file,
                                ticks_per_beat=ticks_per_beat,
                                tempo=tempo)
-(nmat, output_filename, midi_file=None,
-                        ticks_per_beat=480, tempo=500000):
-    """Wrapper for orchestrated_nmat_to_midi"""
-    orchestrated_nmat_to_midi(nmat, output_filename,
-                               midi_file=midi_file,
-                               ticks_per_beat=ticks_per_beat,
-                               tempo=tempo)
